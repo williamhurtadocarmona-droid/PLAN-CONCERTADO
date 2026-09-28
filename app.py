@@ -7,7 +7,7 @@ import zipfile
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 
 st.title("📄 Generador de Planes de Trabajo - SENA")
-st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, selecciona los **Resultados de Aprendizaje** a evaluar y genera los documentos en Word.")
+st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, selecciona los **Resultados de Aprendizaje**, escribe sus **Actividades a desarrollar** y genera los documentos Word.")
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
@@ -39,12 +39,12 @@ if uploaded_excel is not None:
         # 4. Obtener lista de Resultados de Aprendizaje (RAPs) disponibles
         raps_disponibles = sorted(df_filtrado['Resultado de Aprendizaje'].dropna().unique().tolist())
         
-        st.subheader("🎯 Selección de Resultados de Aprendizaje (RAP)")
+        st.subheader("🎯 1. Selección de Resultados de Aprendizaje (RAP)")
         raps_seleccionados = st.multiselect(
-            "Selecciona los Resultados de Aprendizaje que deseas escribir en la tabla:",
+            "Selecciona los Resultados de Aprendizaje que deseas incluir en el Plan de Trabajo:",
             options=raps_disponibles,
             default=raps_disponibles[:3] if len(raps_disponibles) >= 3 else raps_disponibles,
-            help="Solo se conservarán las filas necesarias para los RAPs seleccionados; las filas sobrantes se eliminarán."
+            help="Puedes seleccionar hasta 10 RAPs."
         )
 
         num_raps = len(raps_seleccionados)
@@ -52,11 +52,24 @@ if uploaded_excel is not None:
         if num_raps == 0:
             st.warning("⚠️ Debes seleccionar al menos un Resultado de Aprendizaje para continuar.")
         elif num_raps > 10:
-            st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 filas.")
+            st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 actividades.")
         else:
-            # 5. Obtener la lista de aprendices únicos en formación
+            # 5. Formulario interactivo para ingresar "Actividades a desarrollar" por cada RAP
+            st.subheader("📝 2. Escribir 'Actividades a desarrollar' por cada RAP")
+            st.caption("Ingresa la descripción de la actividad o actividades correspondientes a cada Resultado de Aprendizaje seleccionado:")
+            
+            actividades_por_rap = {}
+            for i, rap in enumerate(raps_seleccionados, 1):
+                actividades_por_rap[rap] = st.text_area(
+                    f"Actividad {i} para el RAP: {rap}",
+                    value=f"Desarrollar guía de aprendizaje y evidencias prácticas de: {rap.split('-')[-1].strip()}",
+                    key=f"act_rap_{i}",
+                    height=80
+                )
+
+            # 6. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
-            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs a escribir: **{num_raps}** (se dejarán {num_raps} filas en la tabla)")
+            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs a evaluar: **{num_raps}**")
             
             with st.expander("👁️ Ver lista de aprendices a procesar"):
                 st.dataframe(aprendices[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos']], use_container_width=True)
@@ -93,7 +106,7 @@ if uploaded_excel is not None:
                                 if k in p.text:
                                     p.text = p.text.replace(k, v)
                                     
-                        # Reemplazar encabezados en la primera tabla (datos aprendiz/programa)
+                        # Reemplazar encabezados en la primera tabla
                         if len(doc.tables) > 0:
                             for row in doc.tables[0].rows:
                                 for cell in row.cells:
@@ -108,7 +121,7 @@ if uploaded_excel is not None:
                         if len(doc.tables) > 1:
                             tabla_actividades = doc.tables[1]
                             
-                            # Rellenar datos en las filas de los RAPs seleccionados
+                            # Rellenar filas de actividades
                             for i in range(num_raps):
                                 row_idx = i + 3
                                 if row_idx < len(tabla_actividades.rows):
@@ -117,8 +130,12 @@ if uploaded_excel is not None:
                                     
                                     # Columna 0: Resultados de Aprendizaje
                                     row_cells[0].text = rap_actual
+                                    
                                     # Columna 1: No Actividad
                                     row_cells[1].text = str(i + 1)
+                                    
+                                    # Columna 2: Actividades a desarrollar
+                                    row_cells[2].text = actividades_por_rap.get(rap_actual, "")
                                     
                                     # Buscar el juicio evaluativo para este RAP
                                     fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
@@ -135,8 +152,7 @@ if uploaded_excel is not None:
                                         row_cells[7].text = ""
                                         row_cells[8].text = "X"
 
-                            # ELIMINAR LAS FILAS SOBRANTES (de la fila num_raps + 3 en adelante)
-                            # Se eliminan en orden inverso (desde abajo hacia arriba) para mantener índices válidos
+                            # ELIMINAR LAS FILAS SOBRANTES
                             for row_to_remove_idx in range(12, num_raps + 2, -1):
                                 if row_to_remove_idx < len(tabla_actividades.rows):
                                     tr = tabla_actividades.rows[row_to_remove_idx]._tr
