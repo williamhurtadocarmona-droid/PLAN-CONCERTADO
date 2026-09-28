@@ -14,14 +14,29 @@ uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)
 
 if uploaded_excel is not None:
     try:
-        # Leer el Excel omitiendo los encabezados de metadatos (fila 13 en adelante)
+        # 1. Extraer la 'Denominación' (Programa) y 'Ficha' de las filas de metadatos (filas 0 a 11)
+        df_meta = pd.read_excel(uploaded_excel, header=None, nrows=12)
+        
+        denominacion_programa = ""
+        numero_ficha = ""
+        
+        for idx, row in df_meta.iterrows():
+            label = str(row[0]).strip()
+            if "Denominación" in label:
+                denominacion_programa = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
+            elif "Ficha de Caracterización" in label:
+                numero_ficha = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
+
+        st.info(f"📌 **Programa de Formación detectado:** {denominacion_programa} | **Ficha:** {numero_ficha}")
+
+        # 2. Leer la tabla de juicios evaluativos (a partir de la fila 13)
         df_raw = pd.read_excel(uploaded_excel, skiprows=12)
         df_raw.columns = [str(c).strip() for c in df_raw.columns]
         
-        # 1. Filtrar únicamente a los aprendices con estado "EN FORMACION"
+        # 3. Filtrar únicamente a los aprendices con estado "EN FORMACION"
         df_filtrado = df_raw[df_raw['Estado'].str.upper() == 'EN FORMACION'].copy()
         
-        # 2. Obtener la lista de aprendices únicos en formación
+        # 4. Obtener la lista de aprendices únicos en formación
         aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
         st.success(f"✅ Se encontraron **{len(aprendices)}** aprendices con estado **EN FORMACION**.")
         
@@ -34,17 +49,20 @@ if uploaded_excel is not None:
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                 for idx, aprendiz in aprendices.iterrows():
                     num_doc = str(aprendiz['Número de Documento'])
-                    nombre_completo = f"{aprendiz['Nombre']} {aprendiz['Apellidos']}"
                     
                     # Cargar la plantilla Word incluida en el repositorio
                     doc = Document("Plan de trabajo .docx")
                     
-                    # Mapear los datos generales del aprendiz
+                    # Diccionario de reemplazos
                     reemplazos = {
                         "«Nombre»": str(aprendiz['Nombre']),
                         "«Apellidos»": str(aprendiz['Apellidos']),
                         "«Tipo_de_Doc»": str(aprendiz['Tipo de Documento']),
                         "«N_Documento»": num_doc,
+                        # Reemplaza el texto o etiqueta del programa
+                        "TECNICO INSTALACION SISTEMAS ELECTRICOS RESIDENCIALES Y COMERCIALES": denominacion_programa,
+                        "«Programa»": denominacion_programa,
+                        "«Denominacion»": denominacion_programa,
                     }
                     
                     # Filtrar juicios evaluativos de este aprendiz específico
