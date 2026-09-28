@@ -7,7 +7,7 @@ import zipfile
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 
 st.title("📄 Generador de Planes de Trabajo - SENA")
-st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, configura los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y la **Etapa del Plan**.")
+st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, configura los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y el **Estado del Plan**.")
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
@@ -64,18 +64,42 @@ if uploaded_excel is not None:
                 help="En 'Plan Inicial' los estados se completan automáticamente según el Excel. En 'Plan Final' puedes definir la entrega manual de cada actividad."
             )
 
-            # 6. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega (si es Final)
-            st.subheader("📝 3. Configurar Actividades y Entregas")
+            # 6. Opciones de Configuración Masiva
+            st.subheader("⚡ 3. Aplicación Masiva (Opcional)")
+            col_m1, col_m2 = st.columns(2)
+            
+            with col_m1:
+                entrega_masiva = st.selectbox(
+                    "Forma de Entrega para TODAS las actividades:",
+                    options=["Sin cambio masivo (Personalizar abajo)", "Física (Todas)", "Digital (Todas)"],
+                    index=0
+                )
+            
+            with col_m2:
+                if tipo_plan == "Plan Final":
+                    estado_masivo = st.selectbox(
+                        "¿Entregó la actividad? para TODAS (Plan Final):",
+                        options=["Sin cambio masivo (Personalizar abajo)", "SÍ (Todos aprobaron / entregaron)", "NO (Ninguno entregó)"],
+                        index=0
+                    )
+                else:
+                    estado_masivo = "Sin cambio masivo"
+
+            # 7. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega individualmente
+            st.subheader("📝 4. Configurar Actividades e Individualizar")
             
             actividades_por_rap = {}
             entrega_por_rap = {}
             estado_entrega_final = {}
 
+            # Definir índices según selección masiva
+            idx_entrega_default = 0 if "Física" in entrega_masiva else 1
+            idx_estado_default = 0 if "SÍ" in estado_masivo else 1
+
             for i, rap in enumerate(raps_seleccionados, 1):
                 st.markdown("---")
                 st.markdown(f"**Actividad {i}:** `{rap}`")
                 
-                # Ajustar columnas dinámicamente según si es Plan Inicial o Final
                 if tipo_plan == "Plan Final":
                     col1, col2, col3 = st.columns([3, 1, 1])
                 else:
@@ -90,23 +114,26 @@ if uploaded_excel is not None:
                     )
                 
                 with col2:
+                    # Aplicar masivo si se seleccionó, si no usar el default individual
+                    sub_idx_entrega = idx_entrega_default if "Todas" in entrega_masiva else 1
                     entrega_por_rap[rap] = st.radio(
                         f"Forma de Entrega {i}",
                         options=["Física", "Digital"],
-                        index=1,
+                        index=sub_idx_entrega,
                         key=f"entrega_rap_{i}"
                     )
                 
                 if tipo_plan == "Plan Final":
                     with col3:
+                        sub_idx_estado = idx_estado_default if ("Todos" in estado_masivo or "Ninguno" in estado_masivo) else 0
                         estado_entrega_final[rap] = st.radio(
                             f"¿Entregó Actividad {i}?",
                             options=["SÍ", "NO"],
-                            index=0,
+                            index=sub_idx_estado,
                             key=f"estado_entrega_{i}"
                         )
 
-            # 7. Obtener la lista de aprendices únicos en formación
+            # 8. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
             st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | Tipo de Plan: **{tipo_plan}** | RAPs a evaluar: **{num_raps}**")
             
