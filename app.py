@@ -6,7 +6,7 @@ import io
 st.set_page_config(page_title="Generador Plan Concertado - SENA", layout="wide")
 
 st.title("📋 Generador de Plan Concertado de Trabajo (SENA)")
-st.write("Carga el archivo Excel de **Juicios Evaluativos** y genera el documento Word individual o por grupo.")
+st.write("Carga el archivo Excel de **Juicios Evaluativos** y genera el documento Word individual o general.")
 
 # 1. Carga de archivos
 col_file1, col_file2 = st.columns(2)
@@ -23,7 +23,6 @@ if excel_file and word_template_file:
     
     st.subheader("⚙️ Configuración del Documento")
     
-    # 2. Formulario para campos generales / manuales
     col_input1, col_input2, col_input3 = st.columns(3)
     
     with col_input1:
@@ -40,67 +39,60 @@ if excel_file and word_template_file:
         fecha_final = st.date_input("Fecha Final de Entrega")
         observaciones = st.text_area("Observaciones", value="")
 
-    # 3. Selección del aprendiz desde los encabezados/columnas del Excel
     st.subheader("👤 Selección de Aprendiz")
     
-    col_sel1, col_sel2, col_sel3 = st.columns(3)
+    col_sel1, col_sel2, col_sel3, col_sel4 = st.columns(4)
     
     with col_sel1:
         col_nombre = st.selectbox("Columna 'Nombre'", df.columns, index=0 if "Nombre" in df.columns else 0)
     with col_sel2:
         col_apellido = st.selectbox("Columna 'Apellidos'", df.columns, index=1 if "Apellidos" in df.columns else 0)
     with col_sel3:
-        col_doc = st.selectbox("Columna 'N° Documento'", df.columns, index=2 if "N_Documento" in df.columns else 0)
+        col_tipo_doc = st.selectbox("Columna 'Tipo de Documento'", df.columns, index=2 if "Tipo_de_Doc" in df.columns else 0)
+    with col_sel4:
+        col_doc = st.selectbox("Columna 'N° Documento'", df.columns, index=3 if "N_Documento" in df.columns else 0)
 
-    col_tipo_doc = st.selectbox("Columna 'Tipo de Documento'", df.columns, index=3 if "Tipo_de_Doc" in df.columns else 0)
-
-    # Menú desplegable para elegir un aprendiz en particular
+    # Menú desplegable para elegir el aprendiz
     aprendices_lista = df.apply(lambda row: f"{row[col_nombre]} {row[col_apellido]} ({row[col_doc]})", axis=1).tolist()
     aprendiz_seleccionado_idx = st.selectbox("Seleccione el Aprendiz:", range(len(aprendices_lista)), format_func=lambda x: aprendices_lista[x])
 
-    # Función para reemplazar marcadores en las tablas del Word
     def reemplazar_en_tabla(doc, reemplazos):
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
-                    for k, v in reemplazos.items():
-                        if k in cell.text:
-                            cell.text = cell.text.replace(k, str(v))
+                    for paragraph in cell.paragraphs:
+                        for k, v in reemplazos.items():
+                            if k in paragraph.text:
+                                paragraph.text = paragraph.text.replace(k, str(v))
 
     if st.button("🚀 Generar Plan Concertado"):
-        # Obtener los datos del aprendiz seleccionado
         row = df.iloc[aprendiz_seleccionado_idx]
         
-        # Cargar documento Word plantilla
         doc = Document(word_template_file)
         
-        # Diccionario de reemplazos básicos
+        # Mapa de marcadores exactos presentes en la plantilla .docx
         reemplazos = {
-            "«Nombre»": row[col_nombre],
-            "«Apellidos»": row[col_apellido],
-            "«Tipo_de_Doc»": row[col_tipo_doc],
-            "«N_Documento»": row[col_doc],
-            "JHON CUENTAS DE CARO": instructor,  # O marcador si está en la plantilla
+            "«Nombre»": str(row[col_nombre]),
+            "«Apellidos»": str(row[col_apellido]),
+            "«Tipo_de_Doc»": str(row[col_tipo_doc]),
+            "«N_Documento»": str(row[col_doc]),
+            "JHON CUENTAS DE CARO": instructor,
         }
         
-        # Lógica para la sección de entregas (SI / NO) en el reporte final
+        # Configuración de los marcadores de entrega (SI / NO)
         for i in range(1, 11):
             tag_si = f"«Act_{i}_Si»"
             tag_no = f"«Act_{i}_No»"
             
             if tipo_documento.startswith("Inicial"):
-                # En el plan inicial se dejan en blanco
                 reemplazos[tag_si] = ""
                 reemplazos[tag_no] = ""
             else:
-                # En el plan final se marca (aquí puedes ajustar la condición de entrega)
                 reemplazos[tag_si] = "X"
                 reemplazos[tag_no] = ""
 
-        # Aplicar reemplazos
         reemplazar_en_tabla(doc, reemplazos)
         
-        # Guardar archivo generado en un buffer de memoria
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
