@@ -28,7 +28,7 @@ if excel_file:
         st.error(f"Error al leer el archivo Excel: {e}")
         st.stop()
 
-    # Limpiar nombres de columnas
+    # Limpiar nombres de columnas y convertir a string
     df.columns = [str(col).strip() for col in df.columns]
 
     st.subheader("⚙️ Configuración del Documento")
@@ -51,30 +51,32 @@ if excel_file:
 
     st.subheader("👤 Selección y Mapeo de Columnas")
     
-    col_sel1, col_sel2, col_sel3, col_sel4 = st.columns(4)
+    cols_lista = list(df.columns)
     
-    # Detección inteligente de columnas por defecto
+    # Función corregida para buscar columnas sin error de AttributeError
     def buscar_columna(patrones, lista_cols):
         for pat in patrones:
-            for col in lista_cols:
-                if pat.lower() in col.lower():
-                    return lista_cols.index(col)
+            for idx, col in enumerate(lista_cols):
+                if pat.lower() in str(col).lower():
+                    return idx
         return 0
 
-    idx_nom = buscar_columna(["nombre"], df.columns)
-    idx_ape = buscar_columna(["apellido"], df.columns)
-    idx_tipo = buscar_columna(["tipo document", "tipo_doc", "tipo de doc"], df.columns)
-    idx_doc = buscar_columna(["numero document", "n_documento", "documento", "identificac"], df.columns)
-    idx_estado = buscar_columna(["estado"], df.columns)
+    idx_nom = buscar_columna(["nombre"], cols_lista)
+    idx_ape = buscar_columna(["apellido"], cols_lista)
+    idx_tipo = buscar_columna(["tipo document", "tipo_doc", "tipo de doc"], cols_lista)
+    idx_doc = buscar_columna(["numero document", "n_documento", "documento", "identificac"], cols_lista)
+    idx_estado = buscar_columna(["estado"], cols_lista)
+
+    col_sel1, col_sel2, col_sel3, col_sel4 = st.columns(4)
 
     with col_sel1:
-        col_nombre = st.selectbox("Columna 'Nombre'", df.columns, index=idx_nom)
+        col_nombre = st.selectbox("Columna 'Nombre'", cols_lista, index=idx_nom)
     with col_sel2:
-        col_apellido = st.selectbox("Columna 'Apellidos'", df.columns, index=idx_ape)
+        col_apellido = st.selectbox("Columna 'Apellidos'", cols_lista, index=idx_ape)
     with col_sel3:
-        col_tipo_doc = st.selectbox("Columna 'Tipo de Documento'", df.columns, index=idx_tipo)
+        col_tipo_doc = st.selectbox("Columna 'Tipo de Documento'", cols_lista, index=idx_tipo)
     with col_sel4:
-        col_doc = st.selectbox("Columna 'N° Documento'", df.columns, index=idx_doc)
+        col_doc = st.selectbox("Columna 'N° Documento'", cols_lista, index=idx_doc)
 
     # Filtrado por Estado "EN FORMACIÓN"
     st.markdown("---")
@@ -82,7 +84,7 @@ if excel_file:
     
     col_filt1, col_filt2 = st.columns(2)
     with col_filt1:
-        col_estado = st.selectbox("Columna de Estado del Aprendiz", df.columns, index=idx_estado)
+        col_estado = st.selectbox("Columna de Estado del Aprendiz", cols_lista, index=idx_estado)
     
     with col_filt2:
         filtrar_en_formacion = st.checkbox("Filtrar solo aprendices 'EN FORMACION'", value=True)
@@ -93,7 +95,7 @@ if excel_file:
     else:
         df_filtrado = df.copy()
 
-    # Eliminar duplicados por número de documento si los hay en el reporte de juicios
+    # Eliminar duplicados por número de documento si los hay
     df_filtrado = df_filtrado.drop_duplicates(subset=[col_doc]).reset_index(drop=True)
 
     # Opción para seleccionar TODOS
@@ -129,7 +131,7 @@ if excel_file:
             st.warning("⚠️ Debe seleccionar al menos un aprendiz.")
             st.stop()
 
-        # Si se seleccionó solo 1 aprendiz -> Descarga directa de 1 archivo Word
+        # Caso 1: Generar 1 solo aprendiz -> Descargar archivo Word
         if len(aprendices_seleccionados_indices) == 1:
             idx = aprendices_seleccionados_indices[0]
             row = df_filtrado.iloc[idx]
@@ -170,7 +172,7 @@ if excel_file:
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
 
-        # Si se seleccionaron MÚLTIPLES aprendices -> Descarga archivo .ZIP
+        # Caso 2: Generar varios aprendices -> Descargar archivo ZIP
         else:
             zip_buffer = io.BytesIO()
             
