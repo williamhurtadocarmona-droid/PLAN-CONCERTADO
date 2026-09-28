@@ -1,7 +1,5 @@
 streamlit
 pandas
-openpyxl
 xlrd
+openpyxl
 python-docx
-pypdf
-reportlab
