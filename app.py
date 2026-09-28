@@ -29,7 +29,7 @@ if excel_file:
     col_input1, col_input2, col_input3 = st.columns(3)
     
     with col_input1:
-        instructor = st.text_input("Nombre del Instructor", value="JHON CUENTAS DE CARO")
+        instructor = st.text_input("Nombre del Instructor", value="WILLIAM SANTIAGO HURTADO CARMONA")
         proyecto_formativo = st.text_input("Proyecto Formativo")
         fase_proyecto = st.text_input("Fase del Proyecto")
         
