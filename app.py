@@ -8,114 +8,101 @@ import zipfile
 st.set_page_config(page_title="Generador Plan Concertado - SENA", layout="wide")
 
 st.title("📋 Generador de Plan Concertado de Trabajo (SENA)")
-st.write("Carga el archivo Excel de **Juicios Evaluativos** para generar los documentos Word.")
+st.write("Generador simplificado de Plan Concertado de Trabajo.")
 
 # Ruta de la plantilla en el repositorio
 PLANTILLA_PATH = "Plan de trabajo .docx"
 
 if not os.path.exists(PLANTILLA_PATH):
-    st.error(f"❌ No se encontró el archivo '{PLANTILLA_PATH}' en la raíz del repositorio.")
+    st.error(f"❌ No se encontró el archivo '{PLANTILLA_PATH}' en el repositorio.")
     st.stop()
 
-# 1. Carga del archivo Excel
-excel_file = st.file_uploader("1. Cargar archivo Excel (Juicios Evaluativos)", type=["xlsx", "xls"])
+# 1. Cargar archivo Excel (Juicios Evaluativos)
+excel_file = st.file_uploader("1. Cargar archivo Excel de Juicios Evaluativos", type=["xlsx", "xls"])
 
 if excel_file:
     try:
-        # Se indica header=12 porque la fila 13 contiene los encabezados reales de SofiaPlus/SENA
+        # Fila 13 contiene los encabezados reales de SofiaPlus
         df = pd.read_excel(excel_file, header=12)
     except Exception as e:
         st.error(f"Error al leer el archivo Excel: {e}")
         st.stop()
 
-    # Limpiar nombres de columnas y convertir a string
     df.columns = [str(col).strip() for col in df.columns]
+    cols_lista = list(df.columns)
 
-    st.subheader("⚙️ Configuración del Documento")
-    
-    col_input1, col_input2, col_input3 = st.columns(3)
-    
-    with col_input1:
-        instructor = st.text_input("Nombre del Instructor", value="WILLIAM SANTIAGO HURTADO CARMONA")
+    st.subheader("📌 1. Selección de Competencia y Resultado de Aprendizaje")
+    col_comp, col_rap = st.columns(2)
+
+    with col_comp:
+        col_competencia = st.selectbox("Seleccione la columna de Competencia:", cols_lista)
+        opciones_competencia = df[col_competencia].dropna().unique().tolist()
+        competencia_seleccionada = st.selectbox("Competencia escogida:", opciones_competencia) if opciones_competencia else ""
+
+    with col_rap:
+        col_resultado = st.selectbox("Seleccione la columna de Resultado de Aprendizaje:", cols_lista)
+        opciones_rap = df[col_resultado].dropna().unique().tolist()
+        resultado_seleccionado = st.selectbox("Resultado de Aprendizaje escogido:", opciones_rap) if opciones_rap else ""
+
+    st.subheader("⚙️ 2. Datos Generales del Instructor y Entrega")
+    col_in1, col_in2, col_in3 = st.columns(3)
+
+    with col_in1:
+        instructor = st.text_input("Instructor", value="WILLIAM SANTIAGO HURTADO CARMONA")
         proyecto_formativo = st.text_input("Proyecto Formativo")
         fase_proyecto = st.text_input("Fase del Proyecto")
-        
-    with col_input2:
-        forma_entrega = st.selectbox("Forma de Entrega de Actividad", ["Digital", "Física"])
-        tipo_documento = st.radio("Tipo de Reporte a Generar", ["Inicial (Sin Marcar Entrega)", "Final (Con SI/NO)"])
-        
-    with col_input3:
-        fecha_inicial = st.date_input("Fecha Inicial (Concertada)")
-        fecha_final = st.date_input("Fecha Final de Entrega")
-        observaciones = st.text_area("Observaciones", value="")
 
-    st.subheader("👤 Selección y Mapeo de Columnas")
-    
-    cols_lista = list(df.columns)
-    
-    # Función corregida para buscar columnas sin error de AttributeError
-    def buscar_columna(patrones, lista_cols):
+    with col_in2:
+        forma_entrega = st.selectbox("Forma de Entrega", ["Digital", "Física"])
+        tipo_reporte = st.radio("Tipo de Reporte", ["Inicial (En Blanco)", "Final (Con Marcación SI)"])
+
+    with col_in3:
+        fecha_inicial = st.date_input("Fecha Inicial")
+        fecha_final = st.date_input("Fecha Final")
+
+    st.subheader("👤 3. Mapeo de Aprendices")
+    col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+
+    def buscar_index(patrones):
         for pat in patrones:
-            for idx, col in enumerate(lista_cols):
+            for idx, col in enumerate(cols_lista):
                 if pat.lower() in str(col).lower():
                     return idx
         return 0
 
-    idx_nom = buscar_columna(["nombre"], cols_lista)
-    idx_ape = buscar_columna(["apellido"], cols_lista)
-    idx_tipo = buscar_columna(["tipo document", "tipo_doc", "tipo de doc"], cols_lista)
-    idx_doc = buscar_columna(["numero document", "n_documento", "documento", "identificac"], cols_lista)
-    idx_estado = buscar_columna(["estado"], cols_lista)
+    with col_a1:
+        col_nom = st.selectbox("Columna Nombres", cols_lista, index=buscar_index(["nombre"]))
+    with col_a2:
+        col_ape = st.selectbox("Columna Apellidos", cols_lista, index=buscar_index(["apellido"]))
+    with col_a3:
+        col_tipo = st.selectbox("Columna Tipo Documento", cols_lista, index=buscar_index(["tipo"]))
+    with col_a4:
+        col_doc = st.selectbox("Columna N° Documento", cols_lista, index=buscar_index(["documento", "numero", "identificac"]))
 
-    col_sel1, col_sel2, col_sel3, col_sel4 = st.columns(4)
+    # Crear columna concatenada de Aprendices (Nombre + Apellido + Documento)
+    df["Aprendiz_Concatenado"] = (
+        df[col_nom].astype(str).str.strip() + " " + 
+        df[col_ape].astype(str).str.strip() + " (" + 
+        df[col_tipo].astype(str).str.strip() + " " + 
+        df[col_doc].astype(str).str.strip() + ")"
+    )
 
-    with col_sel1:
-        col_nombre = st.selectbox("Columna 'Nombre'", cols_lista, index=idx_nom)
-    with col_sel2:
-        col_apellido = st.selectbox("Columna 'Apellidos'", cols_lista, index=idx_ape)
-    with col_sel3:
-        col_tipo_doc = st.selectbox("Columna 'Tipo de Documento'", cols_lista, index=idx_tipo)
-    with col_sel4:
-        col_doc = st.selectbox("Columna 'N° Documento'", cols_lista, index=idx_doc)
+    # Filtrar registros válidos sin duplicados
+    df_aprendices = df.drop_duplicates(subset=[col_doc]).dropna(subset=[col_nom]).reset_index(drop=True)
 
-    # Filtrado por Estado "EN FORMACIÓN"
     st.markdown("---")
-    st.subheader("🎯 Filtrado y Selección de Aprendices")
-    
-    col_filt1, col_filt2 = st.columns(2)
-    with col_filt1:
-        col_estado = st.selectbox("Columna de Estado del Aprendiz", cols_lista, index=idx_estado)
-    
-    with col_filt2:
-        filtrar_en_formacion = st.checkbox("Filtrar solo aprendices 'EN FORMACION'", value=True)
+    st.subheader("🎯 Selección de Aprendices a Generar")
 
-    if filtrar_en_formacion and col_estado in df.columns:
-        df_filtrado = df[df[col_estado].astype(str).str.upper().str.contains("FORMACI", na=False)].copy()
-        st.info(f"Se filtraron **{len(df_filtrado)}** aprendices en estado 'EN FORMACIÓN' de un total de {len(df)} registro(s).")
+    generar_todos = st.checkbox("✅ Generar reporte para TODOS los aprendices", value=True)
+
+    if not generar_todos:
+        lista_opciones = df_aprendices["Aprendiz_Concatenado"].tolist()
+        seleccionados = st.multiselect("Selecciona los aprendices:", options=lista_opciones)
+        df_final = df_aprendices[df_aprendices["Aprendiz_Concatenado"].isin(seleccionados)]
     else:
-        df_filtrado = df.copy()
+        df_final = df_aprendices
 
-    # Eliminar duplicados por número de documento si los hay
-    df_filtrado = df_filtrado.drop_duplicates(subset=[col_doc]).reset_index(drop=True)
-
-    # Opción para seleccionar TODOS
-    seleccionar_todos = st.checkbox("✅ Seleccionar TODOS los aprendices filtrados", value=False)
-    
-    lista_opciones = [
-        f"{row[col_nombre]} {row[col_apellido]} ({row[col_doc]})" 
-        for _, row in df_filtrado.iterrows()
-    ]
-    
-    if seleccionar_todos:
-        aprendices_seleccionados_indices = list(range(len(df_filtrado)))
-        st.success(f"Se procesarán los **{len(df_filtrado)}** aprendices seleccionados.")
-    else:
-        indices_elegidos = st.multiselect(
-            "Seleccione uno o varios Aprendices:",
-            options=list(range(len(lista_opciones))),
-            format_func=lambda x: lista_opciones[x]
-        )
-        aprendices_seleccionados_indices = indices_elegidos
+    st.info(f"Se generarán **{len(df_final)}** documento(s).")
 
     def reemplazar_en_tabla(doc, reemplazos):
         for table in doc.tables:
@@ -126,94 +113,53 @@ if excel_file:
                             if k in paragraph.text:
                                 paragraph.text = paragraph.text.replace(k, str(v))
 
-    if st.button("🚀 Generar Plan(es) Concertado(s)"):
-        if not aprendices_seleccionados_indices:
-            st.warning("⚠️ Debe seleccionar al menos un aprendiz.")
+    if st.button("🚀 Generar Todos los Planes Concertados"):
+        if df_final.empty:
+            st.warning("Debe haber al menos un aprendiz para procesar.")
             st.stop()
 
-        # Caso 1: Generar 1 solo aprendiz -> Descargar archivo Word
-        if len(aprendices_seleccionados_indices) == 1:
-            idx = aprendices_seleccionados_indices[0]
-            row = df_filtrado.iloc[idx]
-            
-            doc = Document(PLANTILLA_PATH)
-            
-            reemplazos = {
-                "«Nombre»": str(row[col_nombre]),
-                "«Apellidos»": str(row[col_apellido]),
-                "«Tipo_de_Doc»": str(row[col_tipo_doc]),
-                "«N_Documento»": str(row[col_doc]),
-                "JHON CUENTAS DE CARO": instructor,
-            }
-            
-            for i in range(1, 11):
-                tag_si = f"«Act_{i}_Si»"
-                tag_no = f"«Act_{i}_No»"
-                if tipo_documento.startswith("Inicial"):
-                    reemplazos[tag_si] = ""
-                    reemplazos[tag_no] = ""
-                else:
-                    reemplazos[tag_si] = "X"
-                    reemplazos[tag_no] = ""
+        zip_buffer = io.BytesIO()
 
-            reemplazar_en_tabla(doc, reemplazos)
-            
-            buffer = io.BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-            
-            nombre_archivo = f"Plan_Concertado_{row[col_nombre]}_{row[col_apellido]}.docx"
-            
-            st.success(f"¡Documento generado exitosamente para **{row[col_nombre]} {row[col_apellido]}**!")
-            st.download_button(
-                label="📥 Descargar Documento Word",
-                data=buffer,
-                file_name=nombre_archivo,
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for _, row in df_final.iterrows():
+                doc = Document(PLANTILLA_PATH)
 
-        # Caso 2: Generar varios aprendices -> Descargar archivo ZIP
-        else:
-            zip_buffer = io.BytesIO()
-            
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                for idx in aprendices_seleccionados_indices:
-                    row = df_filtrado.iloc[idx]
-                    doc = Document(PLANTILLA_PATH)
-                    
-                    reemplazos = {
-                        "«Nombre»": str(row[col_nombre]),
-                        "«Apellidos»": str(row[col_apellido]),
-                        "«Tipo_de_Doc»": str(row[col_tipo_doc]),
-                        "«N_Documento»": str(row[col_doc]),
-                        "JHON CUENTAS DE CARO": instructor,
-                    }
-                    
-                    for i in range(1, 11):
-                        tag_si = f"«Act_{i}_Si»"
-                        tag_no = f"«Act_{i}_No»"
-                        if tipo_documento.startswith("Inicial"):
-                            reemplazos[tag_si] = ""
-                            reemplazos[tag_no] = ""
-                        else:
-                            reemplazos[tag_si] = "X"
-                            reemplazos[tag_no] = ""
+                # Reemplazos directos
+                reemplazos = {
+                    "«Nombre»": str(row[col_nom]),
+                    "«Apellidos»": str(row[col_ape]),
+                    "«Tipo_de_Doc»": str(row[col_tipo]),
+                    "«N_Documento»": str(row[col_doc]),
+                    "JHON CUENTAS DE CARO": instructor,
+                    "WILLIAM SANTIAGO HURTADO CARMONA": instructor
+                }
 
-                    reemplazar_en_tabla(doc, reemplazos)
-                    
-                    doc_buffer = io.BytesIO()
-                    doc.save(doc_buffer)
-                    doc_buffer.seek(0)
-                    
-                    nombre_doc = f"Plan_Concertado_{row[col_nombre]}_{row[col_apellido]}.docx"
-                    zip_file.writestr(nombre_doc, doc_buffer.getvalue())
+                # Configuración Actividades 1 a 10 (Inicial vs Final)
+                for i in range(1, 11):
+                    tag_si = f"«Act_{i}_Si»"
+                    tag_no = f"«Act_{i}_No»"
+                    if tipo_reporte.startswith("Inicial"):
+                        reemplazos[tag_si] = ""
+                        reemplazos[tag_no] = ""
+                    else:
+                        reemplazos[tag_si] = "SI"
+                        reemplazos[tag_no] = ""
 
-            zip_buffer.seek(0)
-            
-            st.success(f"¡Se generaron con éxito **{len(aprendices_seleccionados_indices)}** documentos!")
-            st.download_button(
-                label="📥 Descargar TODOS los Planes (.ZIP)",
-                data=zip_buffer,
-                file_name="Planes_Concertados_Grupo.zip",
-                mime="application/zip"
-            )
+                reemplazar_en_tabla(doc, reemplazos)
+
+                doc_buffer = io.BytesIO()
+                doc.save(doc_buffer)
+                doc_buffer.seek(0)
+
+                nombre_doc = f"Plan_Concertado_{row[col_nom]}_{row[col_ape]}.docx".replace(" ", "_")
+                zip_file.writestr(nombre_doc, doc_buffer.getvalue())
+
+        zip_buffer.seek(0)
+
+        st.success(f"¡Se generaron con éxito **{len(df_final)}** planes concertados!")
+        st.download_button(
+            label="📥 Descargar Paquete Completo (.ZIP)",
+            data=zip_buffer,
+            file_name="Planes_Concertados_Todos.zip",
+            mime="application/zip"
+        )
