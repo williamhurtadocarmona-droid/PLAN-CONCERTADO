@@ -7,7 +7,7 @@ import zipfile
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 
 st.title("📄 Generador de Planes de Trabajo - SENA")
-st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, selecciona los **Resultados de Aprendizaje**, escribe las **Actividades**, define la **Forma de Entrega** y genera los documentos Word.")
+st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, configura los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y la **Etapa del Plan**.")
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
@@ -54,17 +54,32 @@ if uploaded_excel is not None:
         elif num_raps > 10:
             st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 actividades.")
         else:
-            # 5. Configurar Actividades a desarrollar y Forma de Entrega por cada RAP
-            st.subheader("📝 2. Configurar Actividades y Forma de Entrega")
+            # 5. Opciones del Tipo de Plan (Inicial vs Final)
+            st.subheader("📋 2. Estado del Plan de Trabajo")
+            tipo_plan = st.radio(
+                "Selecciona el momento de generación del Plan de Trabajo:",
+                options=["Plan Inicial", "Plan Final"],
+                index=0,
+                horizontal=True,
+                help="En 'Plan Inicial' los estados se completan automáticamente según el Excel. En 'Plan Final' puedes definir la entrega manual de cada actividad."
+            )
+
+            # 6. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega (si es Final)
+            st.subheader("📝 3. Configurar Actividades y Entregas")
             
             actividades_por_rap = {}
             entrega_por_rap = {}
+            estado_entrega_final = {}
 
             for i, rap in enumerate(raps_seleccionados, 1):
-                st.markdown(f"---")
+                st.markdown("---")
                 st.markdown(f"**Actividad {i}:** `{rap}`")
                 
-                col1, col2 = st.columns([3, 1])
+                # Ajustar columnas dinámicamente según si es Plan Inicial o Final
+                if tipo_plan == "Plan Final":
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                else:
+                    col1, col2 = st.columns([3, 1])
                 
                 with col1:
                     actividades_por_rap[rap] = st.text_area(
@@ -78,13 +93,22 @@ if uploaded_excel is not None:
                     entrega_por_rap[rap] = st.radio(
                         f"Forma de Entrega {i}",
                         options=["Física", "Digital"],
-                        index=1, # Digital por defecto
+                        index=1,
                         key=f"entrega_rap_{i}"
                     )
+                
+                if tipo_plan == "Plan Final":
+                    with col3:
+                        estado_entrega_final[rap] = st.radio(
+                            f"¿Entregó Actividad {i}?",
+                            options=["SÍ", "NO"],
+                            index=0,
+                            key=f"estado_entrega_{i}"
+                        )
 
-            # 6. Obtener la lista de aprendices únicos en formación
+            # 7. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
-            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs a evaluar: **{num_raps}**")
+            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | Tipo de Plan: **{tipo_plan}** | RAPs a evaluar: **{num_raps}**")
             
             with st.expander("👁️ Ver lista de aprendices a procesar"):
                 st.dataframe(aprendices[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos']], use_container_width=True)
@@ -161,20 +185,29 @@ if uploaded_excel is not None:
                                         row_cells[3].text = ""
                                         row_cells[4].text = "X"
 
-                                    # Buscar el juicio evaluativo para este RAP
-                                    fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
-                                    
-                                    if not fila_rap.empty:
-                                        juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
-                                        if "APROBADO" in juicio:
+                                    # Determinación de entrega según si es Plan Inicial o Plan Final
+                                    if tipo_plan == "Plan Final":
+                                        entrego = estado_entrega_final.get(rap_actual, "SÍ")
+                                        if entrego == "SÍ":
                                             row_cells[7].text = "X"  # Columna 7: SI
                                             row_cells[8].text = ""   # Columna 8: NO
                                         else:
                                             row_cells[7].text = ""   # Columna 7: SI
                                             row_cells[8].text = "X"  # Columna 8: NO
                                     else:
-                                        row_cells[7].text = ""
-                                        row_cells[8].text = "X"
+                                        # Plan Inicial: Lee el reporte del Excel
+                                        fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
+                                        if not fila_rap.empty:
+                                            juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
+                                            if "APROBADO" in juicio:
+                                                row_cells[7].text = "X"  # Columna 7: SI
+                                                row_cells[8].text = ""   # Columna 8: NO
+                                            else:
+                                                row_cells[7].text = ""   # Columna 7: SI
+                                                row_cells[8].text = "X"  # Columna 8: NO
+                                        else:
+                                            row_cells[7].text = ""
+                                            row_cells[8].text = "X"
 
                             # ELIMINAR LAS FILAS SOBRANTES
                             for row_to_remove_idx in range(12, num_raps + 2, -1):
@@ -194,7 +227,7 @@ if uploaded_excel is not None:
                 st.download_button(
                     label="📦 Descargar Documentos de Aprendices (.zip)",
                     data=zip_buffer.getvalue(),
-                    file_name=f"Planes_Trabajo_Ficha_{numero_ficha}.zip",
+                    file_name=f"Planes_Trabajo_{tipo_plan.replace(' ', '_')}_Ficha_{numero_ficha}.zip",
                     mime="application/zip"
                 )
 
