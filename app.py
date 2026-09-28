@@ -2,22 +2,25 @@ import streamlit as st
 import pandas as pd
 from docx import Document
 import io
+import os
 
 st.set_page_config(page_title="Generador Plan Concertado - SENA", layout="wide")
 
 st.title("📋 Generador de Plan Concertado de Trabajo (SENA)")
-st.write("Carga el archivo Excel de **Juicios Evaluativos** y genera el documento Word individual o general.")
+st.write("Carga el archivo Excel de **Juicios Evaluativos** para generar el documento Word.")
 
-# 1. Carga de archivos
-col_file1, col_file2 = st.columns(2)
+# Ruta de la plantilla incluida en el repositorio de GitHub
+PLANTILLA_PATH = "Plan de trabajo .docx"
 
-with col_file1:
-    excel_file = st.file_uploader("1. Cargar archivo Excel (Juicios Evaluativos)", type=["xlsx", "xls"])
+# Verificar si la plantilla existe en el repositorio
+if not os.path.exists(PLANTILLA_PATH):
+    st.error(f"❌ No se encontró el archivo '{PLANTILLA_PATH}' en la raíz del repositorio.")
+    st.stop()
 
-with col_file2:
-    word_template_file = st.file_uploader("2. Cargar Plantilla Word (Plan de Trabajo .docx)", type=["docx"])
+# 1. Carga únicamente del archivo Excel
+excel_file = st.file_uploader("1. Cargar archivo Excel (Juicios Evaluativos)", type=["xlsx", "xls"])
 
-if excel_file and word_template_file:
+if excel_file:
     # Leer el archivo de Excel
     df = pd.read_excel(excel_file)
     
@@ -68,9 +71,10 @@ if excel_file and word_template_file:
     if st.button("🚀 Generar Plan Concertado"):
         row = df.iloc[aprendiz_seleccionado_idx]
         
-        doc = Document(word_template_file)
+        # Cargar automáticamente la plantilla interna
+        doc = Document(PLANTILLA_PATH)
         
-        # Mapa de marcadores exactos presentes en la plantilla .docx
+        # Mapa de reemplazo de campos
         reemplazos = {
             "«Nombre»": str(row[col_nombre]),
             "«Apellidos»": str(row[col_apellido]),
@@ -79,7 +83,7 @@ if excel_file and word_template_file:
             "JHON CUENTAS DE CARO": instructor,
         }
         
-        # Configuración de los marcadores de entrega (SI / NO)
+        # Lógica para la sección de marcación ¿Entrego la Actividad?
         for i in range(1, 11):
             tag_si = f"«Act_{i}_Si»"
             tag_no = f"«Act_{i}_No»"
