@@ -7,7 +7,7 @@ import zipfile
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 
 st.title("📄 Generador de Planes de Trabajo - SENA")
-st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, configura los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y el **Estado del Plan**.")
+st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, configura el **Proyecto Formativo**, los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y el **Estado del Plan**.")
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
@@ -36,10 +36,30 @@ if uploaded_excel is not None:
         # 3. Filtrar únicamente a los aprendices con estado "EN FORMACION"
         df_filtrado = df_raw[df_raw['Estado'].str.upper() == 'EN FORMACION'].copy()
         
-        # 4. Obtener lista de Resultados de Aprendizaje (RAPs) disponibles
+        # 4. Información General del Proyecto Formativo y Fase
+        st.subheader("🛠️ 1. Datos del Proyecto Formativo")
+        col_proj1, col_proj2 = st.columns(2)
+        
+        with col_proj1:
+            proyecto_formativo_input = st.text_input(
+                "Proyecto Formativo:",
+                value="",
+                placeholder="Ej: Mantenimiento y montaje de sistemas eléctricos industriales",
+                help="Escribe el nombre del Proyecto Formativo."
+            )
+            
+        with col_proj2:
+            fase_proyecto_input = st.selectbox(
+                "Fase del Proyecto:",
+                options=["Análisis", "Planeación", "Ejecución", "Evaluación"],
+                index=2, # Ejecución por defecto
+                help="Selecciona la Fase del Proyecto correspondiente."
+            )
+
+        # 5. Obtener lista de Resultados de Aprendizaje (RAPs) disponibles
         raps_disponibles = sorted(df_filtrado['Resultado de Aprendizaje'].dropna().unique().tolist())
         
-        st.subheader("🎯 1. Selección de Resultados de Aprendizaje (RAP)")
+        st.subheader("🎯 2. Selección de Resultados de Aprendizaje (RAP)")
         raps_seleccionados = st.multiselect(
             "Selecciona los Resultados de Aprendizaje que deseas incluir en el Plan de Trabajo:",
             options=raps_disponibles,
@@ -54,8 +74,8 @@ if uploaded_excel is not None:
         elif num_raps > 10:
             st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 actividades.")
         else:
-            # 5. Opciones del Tipo de Plan (Inicial vs Final)
-            st.subheader("📋 2. Estado del Plan de Trabajo")
+            # 6. Opciones del Tipo de Plan (Inicial vs Final)
+            st.subheader("📋 3. Estado del Plan de Trabajo")
             tipo_plan = st.radio(
                 "Selecciona el momento de generación del Plan de Trabajo:",
                 options=["Plan Inicial", "Plan Final"],
@@ -64,8 +84,8 @@ if uploaded_excel is not None:
                 help="En 'Plan Inicial' los estados se completan automáticamente según el Excel. En 'Plan Final' puedes definir la entrega manual de cada actividad."
             )
 
-            # 6. Opciones de Configuración Masiva
-            st.subheader("⚡ 3. Aplicación Masiva (Opcional)")
+            # 7. Opciones de Configuración Masiva
+            st.subheader("⚡ 4. Aplicación Masiva (Opcional)")
             col_m1, col_m2 = st.columns(2)
             
             with col_m1:
@@ -85,14 +105,13 @@ if uploaded_excel is not None:
                 else:
                     estado_masivo = "Sin cambio masivo"
 
-            # 7. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega individualmente
-            st.subheader("📝 4. Configurar Actividades e Individualizar")
+            # 8. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega
+            st.subheader("📝 5. Configurar Actividades e Individualizar")
             
             actividades_por_rap = {}
             entrega_por_rap = {}
             estado_entrega_final = {}
 
-            # Definir índices según selección masiva
             idx_entrega_default = 0 if "Física" in entrega_masiva else 1
             idx_estado_default = 0 if "SÍ" in estado_masivo else 1
 
@@ -114,7 +133,6 @@ if uploaded_excel is not None:
                     )
                 
                 with col2:
-                    # Aplicar masivo si se seleccionó, si no usar el default individual
                     sub_idx_entrega = idx_entrega_default if "Todas" in entrega_masiva else 1
                     entrega_por_rap[rap] = st.radio(
                         f"Forma de Entrega {i}",
@@ -133,7 +151,7 @@ if uploaded_excel is not None:
                             key=f"estado_entrega_{i}"
                         )
 
-            # 8. Obtener la lista de aprendices únicos en formación
+            # 9. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
             st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | Tipo de Plan: **{tipo_plan}** | RAPs a evaluar: **{num_raps}**")
             
@@ -164,6 +182,12 @@ if uploaded_excel is not None:
                             "837101": numero_ficha,
                             "«Ficha»": numero_ficha,
                             "«Numero_Ficha»": numero_ficha,
+                            
+                            # Proyecto Formativo y Fase
+                            "«Proyecto_Formativo»": proyecto_formativo_input,
+                            "«Proyecto»": proyecto_formativo_input,
+                            "«Fase_Proyecto»": fase_proyecto_input,
+                            "«Fase»": fase_proyecto_input,
                         }
                         
                         # Reemplazar encabezados en párrafos
@@ -172,13 +196,23 @@ if uploaded_excel is not None:
                                 if k in p.text:
                                     p.text = p.text.replace(k, v)
                                     
-                        # Reemplazar encabezados en la primera tabla
+                        # Reemplazar encabezados en la primera tabla (datos aprendiz/programa)
                         if len(doc.tables) > 0:
-                            for row in doc.tables[0].rows:
+                            t0 = doc.tables[0]
+                            for row in t0.rows:
                                 for cell in row.cells:
                                     for k, v in reemplazos.items():
                                         if k in cell.text:
                                             cell.text = cell.text.replace(k, v)
+                            
+                            # Inserción directa en celdas para Proyecto Formativo (Fila 2, Celda 5) y Fase del Proyecto (Fila 3, Celda 1)
+                            if len(t0.rows) > 2 and len(t0.rows[2].cells) > 5:
+                                if "Proyecto Formativo:" in t0.rows[2].cells[5].text:
+                                    t0.rows[2].cells[6].text = proyecto_formativo_input
+                                    
+                            if len(t0.rows) > 3 and len(t0.rows[3].cells) > 1:
+                                if "Fase del" in t0.rows[3].cells[0].text or "Fase" in t0.rows[3].cells[0].text:
+                                    t0.rows[3].cells[1].text = fase_proyecto_input
 
                         # Filtrar juicios evaluativos del aprendiz actual
                         df_aprendiz = df_filtrado[df_filtrado['Número de Documento'] == aprendiz['Número de Documento']]
