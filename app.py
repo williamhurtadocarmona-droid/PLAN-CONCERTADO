@@ -14,7 +14,7 @@ uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)
 
 if uploaded_excel is not None:
     try:
-        # 1. Extraer 'Denominación' (Programa) y 'Ficha de Caracterización' de los metadatos (filas 0 a 11)
+        # 1. Extraer metadatos exactos de las primeras 12 filas
         df_meta = pd.read_excel(uploaded_excel, header=None, nrows=12)
         
         denominacion_programa = ""
@@ -22,10 +22,12 @@ if uploaded_excel is not None:
         
         for idx, row in df_meta.iterrows():
             label = str(row[0]).strip()
-            if "Denominación" in label:
-                denominacion_programa = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
-            elif "Ficha de Caracterización" in label:
+            
+            # Búsqueda exacta de 'Ficha de Caracterización:' evitando 'Estado de la Ficha...'
+            if label == "Ficha de Caracterización:":
                 numero_ficha = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
+            elif label == "Denominación:":
+                denominacion_programa = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
 
         st.info(f"📌 **Programa:** {denominacion_programa} | **Ficha de Caracterización:** {numero_ficha}")
 
