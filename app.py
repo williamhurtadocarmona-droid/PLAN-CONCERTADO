@@ -14,7 +14,7 @@ uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)
 
 if uploaded_excel is not None:
     try:
-        # 1. Extraer la 'Denominación' (Programa) y 'Ficha' de las filas de metadatos (filas 0 a 11)
+        # 1. Extraer 'Denominación' (Programa) y 'Ficha de Caracterización' de los metadatos (filas 0 a 11)
         df_meta = pd.read_excel(uploaded_excel, header=None, nrows=12)
         
         denominacion_programa = ""
@@ -27,7 +27,7 @@ if uploaded_excel is not None:
             elif "Ficha de Caracterización" in label:
                 numero_ficha = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
 
-        st.info(f"📌 **Programa de Formación detectado:** {denominacion_programa} | **Ficha:** {numero_ficha}")
+        st.info(f"📌 **Programa:** {denominacion_programa} | **Ficha de Caracterización:** {numero_ficha}")
 
         # 2. Leer la tabla de juicios evaluativos (a partir de la fila 13)
         df_raw = pd.read_excel(uploaded_excel, skiprows=12)
@@ -40,7 +40,7 @@ if uploaded_excel is not None:
         aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
         st.success(f"✅ Se encontraron **{len(aprendices)}** aprendices con estado **EN FORMACION**.")
         
-        # Mostrar vista previa de los aprendices que se van a procesar
+        # Mostrar vista previa de los aprendices a procesar
         st.dataframe(aprendices[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos']], use_container_width=True)
         
         if st.button("🚀 Generar Planes de Trabajo en ZIP"):
@@ -59,13 +59,19 @@ if uploaded_excel is not None:
                         "«Apellidos»": str(aprendiz['Apellidos']),
                         "«Tipo_de_Doc»": str(aprendiz['Tipo de Documento']),
                         "«N_Documento»": num_doc,
-                        # Reemplaza el texto o etiqueta del programa
+                        
+                        # Reemplazo del Programa de Formación
                         "TECNICO INSTALACION SISTEMAS ELECTRICOS RESIDENCIALES Y COMERCIALES": denominacion_programa,
                         "«Programa»": denominacion_programa,
                         "«Denominacion»": denominacion_programa,
+                        
+                        # Reemplazo del Número de Ficha
+                        "837101": numero_ficha,
+                        "«Ficha»": numero_ficha,
+                        "«Numero_Ficha»": numero_ficha,
                     }
                     
-                    # Filtrar juicios evaluativos de este aprendiz específico
+                    # Filtrar juicios evaluativos del aprendiz
                     df_aprendiz = df_filtrado[df_filtrado['Número de Documento'] == aprendiz['Número de Documento']].reset_index(drop=True)
                     
                     # Asignar los juicios a los marcadores Act_1_Si, Act_1_No, etc.
@@ -85,13 +91,13 @@ if uploaded_excel is not None:
                             reemplazos[si_key] = ""
                             reemplazos[no_key] = ""
 
-                    # Reemplazar valores en todos los párrafos del documento Word
+                    # Reemplazar en párrafos del documento Word
                     for p in doc.paragraphs:
                         for k, v in reemplazos.items():
                             if k in p.text:
                                 p.text = p.text.replace(k, v)
                                 
-                    # Reemplazar valores en las tablas del documento Word
+                    # Reemplazar en tablas del documento Word
                     for table in doc.tables:
                         for row in table.rows:
                             for cell in row.cells:
@@ -107,7 +113,7 @@ if uploaded_excel is not None:
                     filename = f"Plan_Trabajo_{num_doc}_{aprendiz['Nombre']}_{aprendiz['Apellidos']}.docx"
                     zip_file.writestr(filename, doc_io.getvalue())
             
-            # Botón de descarga para el archivo ZIP resultante
+            # Botón para descargar el ZIP resultante
             st.download_button(
                 label="📦 Descargar Documentos de Aprendices en Formación (.zip)",
                 data=zip_buffer.getvalue(),
