@@ -41,20 +41,20 @@ if uploaded_excel is not None:
         
         st.subheader("🎯 Selección de Resultados de Aprendizaje (RAP)")
         raps_seleccionados = st.multiselect(
-            "Selecciona uno o más Resultados de Aprendizaje que deseas incluir en los planes de trabajo:",
+            "Selecciona los Resultados de Aprendizaje que deseas escribir en la columna correspondiente:",
             options=raps_disponibles,
             default=raps_disponibles[:3] if len(raps_disponibles) >= 3 else raps_disponibles,
-            help="Puedes seleccionar hasta 10 RAPs para que coincidan con la estructura de la plantilla."
+            help="Cada RAP seleccionado ocupará una celda de la columna 'Resultados de Aprendizaje' (máximo 10)."
         )
 
         if len(raps_seleccionados) == 0:
             st.warning("⚠️ Debes seleccionar al menos un Resultado de Aprendizaje para continuar.")
         elif len(raps_seleccionados) > 10:
-            st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite máximo 10 actividades por documento.")
+            st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 filas.")
         else:
             # 5. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
-            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs seleccionados: **{len(raps_seleccionados)}**")
+            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs a escribir: **{len(raps_seleccionados)}**")
             
             with st.expander("👁️ Ver lista de aprendices a procesar"):
                 st.dataframe(aprendices[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos']], use_container_width=True)
@@ -69,7 +69,7 @@ if uploaded_excel is not None:
                         # Cargar la plantilla Word incluida en el repositorio
                         doc = Document("Plan de trabajo .docx")
                         
-                        # Diccionario de reemplazos generales
+                        # Diccionario de reemplazos generales del encabezado
                         reemplazos = {
                             "«Nombre»": str(aprendiz['Nombre']),
                             "«Apellidos»": str(aprendiz['Apellidos']),
@@ -85,53 +85,62 @@ if uploaded_excel is not None:
                             "«Numero_Ficha»": numero_ficha,
                         }
                         
-                        # Filtrar juicios evaluativos del aprendiz actual
-                        df_aprendiz = df_filtrado[df_filtrado['Número de Documento'] == aprendiz['Número de Documento']]
-                        
-                        # Procesar cada uno de los RAPs seleccionados (hasta 10)
-                        for i in range(1, 11):
-                            rap_key = f"«Act_{i}»"          # Si agregas marcador del texto del RAP
-                            si_key = f"«Act_{i}_Si»"
-                            no_key = f"«Act_{i}_No»"
-                            
-                            if i - 1 < len(raps_seleccionados):
-                                rap_actual = raps_seleccionados[i - 1]
-                                reemplazos[rap_key] = rap_actual
-                                
-                                # Buscar el juicio del aprendiz para este RAP
-                                fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
-                                
-                                if not fila_rap.empty:
-                                    juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
-                                    if "APROBADO" in juicio:
-                                        reemplazos[si_key] = "X"
-                                        reemplazos[no_key] = ""
-                                    else:
-                                        reemplazos[si_key] = ""
-                                        reemplazos[no_key] = "X"
-                                else:
-                                    # Si el RAP no está registrado para el aprendiz
-                                    reemplazos[si_key] = ""
-                                    reemplazos[no_key] = "X"
-                            else:
-                                # Dejar vacíos las filas sobrantes
-                                reemplazos[rap_key] = ""
-                                reemplazos[si_key] = ""
-                                reemplazos[no_key] = ""
-
-                        # Reemplazar en párrafos
+                        # Reemplazar encabezados en párrafos
                         for p in doc.paragraphs:
                             for k, v in reemplazos.items():
                                 if k in p.text:
                                     p.text = p.text.replace(k, v)
                                     
-                        # Reemplazar en tablas
-                        for table in doc.tables:
-                            for row in table.rows:
+                        # Reemplazar encabezados en la primera tabla (datos aprendiz/programa)
+                        if len(doc.tables) > 0:
+                            for row in doc.tables[0].rows:
                                 for cell in row.cells:
                                     for k, v in reemplazos.items():
                                         if k in cell.text:
                                             cell.text = cell.text.replace(k, v)
+
+                        # Filtrar juicios evaluativos del aprendiz actual
+                        df_aprendiz = df_filtrado[df_filtrado['Número de Documento'] == aprendiz['Número de Documento']]
+                        
+                        # Modificar la segunda tabla (Tabla 1: Descriptores de la Ruta de Aprendizaje)
+                        if len(doc.tables) > 1:
+                            tabla_actividades = doc.tables[1]
+                            
+                            # Recorrer las 10 filas de actividades (filas de índice 3 a 12 en la tabla)
+                            for i in range(10):
+                                row_idx = i + 3
+                                if row_idx < len(tabla_actividades.rows):
+                                    row_cells = tabla_actividades.rows[row_idx].cells
+                                    
+                                    if i < len(raps_seleccionados):
+                                        rap_actual = raps_seleccionados[i]
+                                        
+                                        # 1. Escribir el texto del RAP en la primera celda (Columna 0: Resultados de Aprendizaje)
+                                        row_cells[0].text = rap_actual
+                                        
+                                        # 2. Asignar el número de actividad (Columna 1: No Actividad)
+                                        row_cells[1].text = str(i + 1)
+                                        
+                                        # 3. Buscar el juicio de este RAP para el aprendiz
+                                        fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
+                                        
+                                        if not fila_rap.empty:
+                                            juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
+                                            if "APROBADO" in juicio:
+                                                row_cells[7].text = "X"  # Columna 7: SI
+                                                row_cells[8].text = ""   # Columna 8: NO
+                                            else:
+                                                row_cells[7].text = ""   # Columna 7: SI
+                                                row_cells[8].text = "X"  # Columna 8: NO
+                                        else:
+                                            row_cells[7].text = ""
+                                            row_cells[8].text = "X"
+                                    else:
+                                        # Fila sin RAP asignado
+                                        row_cells[0].text = ""
+                                        row_cells[1].text = ""
+                                        row_cells[7].text = ""
+                                        row_cells[8].text = ""
 
                         # Guardar el documento del aprendiz en memoria interna
                         doc_io = io.BytesIO()
