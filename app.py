@@ -41,20 +41,22 @@ if uploaded_excel is not None:
         
         st.subheader("🎯 Selección de Resultados de Aprendizaje (RAP)")
         raps_seleccionados = st.multiselect(
-            "Selecciona los Resultados de Aprendizaje que deseas escribir en la columna correspondiente:",
+            "Selecciona los Resultados de Aprendizaje que deseas escribir en la tabla:",
             options=raps_disponibles,
             default=raps_disponibles[:3] if len(raps_disponibles) >= 3 else raps_disponibles,
-            help="Cada RAP seleccionado ocupará una celda de la columna 'Resultados de Aprendizaje' (máximo 10)."
+            help="Solo se conservarán las filas necesarias para los RAPs seleccionados; las filas sobrantes se eliminarán."
         )
 
-        if len(raps_seleccionados) == 0:
+        num_raps = len(raps_seleccionados)
+
+        if num_raps == 0:
             st.warning("⚠️ Debes seleccionar al menos un Resultado de Aprendizaje para continuar.")
-        elif len(raps_seleccionados) > 10:
+        elif num_raps > 10:
             st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 filas.")
         else:
             # 5. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
-            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs a escribir: **{len(raps_seleccionados)}**")
+            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | RAPs a escribir: **{num_raps}** (se dejarán {num_raps} filas en la tabla)")
             
             with st.expander("👁️ Ver lista de aprendices a procesar"):
                 st.dataframe(aprendices[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos']], use_container_width=True)
@@ -106,41 +108,39 @@ if uploaded_excel is not None:
                         if len(doc.tables) > 1:
                             tabla_actividades = doc.tables[1]
                             
-                            # Recorrer las 10 filas de actividades (filas de índice 3 a 12 en la tabla)
-                            for i in range(10):
+                            # Rellenar datos en las filas de los RAPs seleccionados
+                            for i in range(num_raps):
                                 row_idx = i + 3
                                 if row_idx < len(tabla_actividades.rows):
                                     row_cells = tabla_actividades.rows[row_idx].cells
+                                    rap_actual = raps_seleccionados[i]
                                     
-                                    if i < len(raps_seleccionados):
-                                        rap_actual = raps_seleccionados[i]
-                                        
-                                        # 1. Escribir el texto del RAP en la primera celda (Columna 0: Resultados de Aprendizaje)
-                                        row_cells[0].text = rap_actual
-                                        
-                                        # 2. Asignar el número de actividad (Columna 1: No Actividad)
-                                        row_cells[1].text = str(i + 1)
-                                        
-                                        # 3. Buscar el juicio de este RAP para el aprendiz
-                                        fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
-                                        
-                                        if not fila_rap.empty:
-                                            juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
-                                            if "APROBADO" in juicio:
-                                                row_cells[7].text = "X"  # Columna 7: SI
-                                                row_cells[8].text = ""   # Columna 8: NO
-                                            else:
-                                                row_cells[7].text = ""   # Columna 7: SI
-                                                row_cells[8].text = "X"  # Columna 8: NO
+                                    # Columna 0: Resultados de Aprendizaje
+                                    row_cells[0].text = rap_actual
+                                    # Columna 1: No Actividad
+                                    row_cells[1].text = str(i + 1)
+                                    
+                                    # Buscar el juicio evaluativo para este RAP
+                                    fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
+                                    
+                                    if not fila_rap.empty:
+                                        juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
+                                        if "APROBADO" in juicio:
+                                            row_cells[7].text = "X"  # Columna 7: SI
+                                            row_cells[8].text = ""   # Columna 8: NO
                                         else:
-                                            row_cells[7].text = ""
-                                            row_cells[8].text = "X"
+                                            row_cells[7].text = ""   # Columna 7: SI
+                                            row_cells[8].text = "X"  # Columna 8: NO
                                     else:
-                                        # Fila sin RAP asignado
-                                        row_cells[0].text = ""
-                                        row_cells[1].text = ""
                                         row_cells[7].text = ""
-                                        row_cells[8].text = ""
+                                        row_cells[8].text = "X"
+
+                            # ELIMINAR LAS FILAS SOBRANTES (de la fila num_raps + 3 en adelante)
+                            # Se eliminan en orden inverso (desde abajo hacia arriba) para mantener índices válidos
+                            for row_to_remove_idx in range(12, num_raps + 2, -1):
+                                if row_to_remove_idx < len(tabla_actividades.rows):
+                                    tr = tabla_actividades.rows[row_to_remove_idx]._tr
+                                    tr.getparent().remove(tr)
 
                         # Guardar el documento del aprendiz en memoria interna
                         doc_io = io.BytesIO()
