@@ -7,7 +7,7 @@ import zipfile
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 
 st.title("📄 Generador de Planes de Trabajo - SENA")
-st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, selecciona los **Resultados de Aprendizaje**, escribe sus **Actividades a desarrollar** y genera los documentos Word.")
+st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, selecciona los **Resultados de Aprendizaje**, escribe las **Actividades**, define la **Forma de Entrega** y genera los documentos Word.")
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
@@ -54,18 +54,33 @@ if uploaded_excel is not None:
         elif num_raps > 10:
             st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 actividades.")
         else:
-            # 5. Formulario interactivo para ingresar "Actividades a desarrollar" por cada RAP
-            st.subheader("📝 2. Escribir 'Actividades a desarrollar' por cada RAP")
-            st.caption("Ingresa la descripción de la actividad o actividades correspondientes a cada Resultado de Aprendizaje seleccionado:")
+            # 5. Configurar Actividades a desarrollar y Forma de Entrega por cada RAP
+            st.subheader("📝 2. Configurar Actividades y Forma de Entrega")
             
             actividades_por_rap = {}
+            entrega_por_rap = {}
+
             for i, rap in enumerate(raps_seleccionados, 1):
-                actividades_por_rap[rap] = st.text_area(
-                    f"Actividad {i} para el RAP: {rap}",
-                    value=f"Desarrollar guía de aprendizaje y evidencias prácticas de: {rap.split('-')[-1].strip()}",
-                    key=f"act_rap_{i}",
-                    height=80
-                )
+                st.markdown(f"---")
+                st.markdown(f"**Actividad {i}:** `{rap}`")
+                
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    actividades_por_rap[rap] = st.text_area(
+                        f"Descripción de la Actividad {i}",
+                        value=f"Desarrollar guía de aprendizaje y evidencias prácticas de: {rap.split('-')[-1].strip()}",
+                        key=f"act_rap_{i}",
+                        height=80
+                    )
+                
+                with col2:
+                    entrega_por_rap[rap] = st.radio(
+                        f"Forma de Entrega {i}",
+                        options=["Física", "Digital"],
+                        index=1, # Digital por defecto
+                        key=f"entrega_rap_{i}"
+                    )
 
             # 6. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
@@ -137,6 +152,15 @@ if uploaded_excel is not None:
                                     # Columna 2: Actividades a desarrollar
                                     row_cells[2].text = actividades_por_rap.get(rap_actual, "")
                                     
+                                    # Forma de Entrega: Columna 3 (Física) / Columna 4 (Digital)
+                                    tipo_entrega = entrega_por_rap.get(rap_actual, "Digital")
+                                    if tipo_entrega == "Física":
+                                        row_cells[3].text = "X"
+                                        row_cells[4].text = ""
+                                    else:
+                                        row_cells[3].text = ""
+                                        row_cells[4].text = "X"
+
                                     # Buscar el juicio evaluativo para este RAP
                                     fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
                                     
