@@ -73,7 +73,7 @@ if uploaded_excel is not None:
         # 6. Selección de Competencia y Resultados de Aprendizaje (RAP)
         st.subheader("🎯 2. Selección de Competencia y Resultados de Aprendizaje (RAP)")
         
-        # Actividades para RAP 1 (TORNO CONVENCIONAL)
+        # Actividades para TOTF RAP 1 (TORNO CONVENCIONAL)
         actividades_totf_rap1 = [
             "Preparación de herramientas y equipo: Identificar el tipo de herramienta de corte según material (acero, aluminio, bronce, etc.) y tipo de operación (cilindrado, refrentado, ranurado, roscado). Acondicionar y afilar herramientas de corte aplicando ángulos de incidencia, desprendimiento y radio punta adecuados. Seleccionar y preparar los elementos de sujeción (mordazas, portaherramientas, contrapunto).",
             "Elaboración de la orden operacional: Analizar un plano técnico de la pieza: dimensiones, tolerancias, acabados y ajustes. Secuenciar operaciones de mecanizado en una orden de trabajo (operaciones preliminares → desbaste → semiacabado → acabado). Calcular velocidades y avances adecuados de acuerdo al material.",
@@ -81,13 +81,18 @@ if uploaded_excel is not None:
             "Ejecución de operaciones de torneado: Cilindrado, refrentado, taladrado, roscado y tronzado según plano técnico y orden operacional."
         ]
 
-        # Actividades para RAP 2 (FRESADORA CONVENCIONAL)
+        # Actividades para TOTF RAP 2 (FRESADORA CONVENCIONAL)
         actividades_totf_rap2 = [
             "Preparación y puesta a punto de máquina y herramientas: Seleccionar cortadores (fresas cilíndricas, de disco, de punta esférica, de ranura) según material y operación. Montar la pieza correctamente con sistemas de sujeción (mordazas, bridas, divisores). Calibrar recorridos y verificar movimientos de avance y corte.",
             "Ejecución del fresado según orden operacional: Interpretar plano y definir secuencia de operaciones de fresado (planeado, ranurado, engranaje, roscado). Ejecutar operaciones siguiendo el plan de trabajo.",
             "Control dimensional y verificación: Medir cotas de la pieza fresada con instrumentos de metrología. Validar tolerancias, geometrías y superficie de acuerdo al plano.",
             "Identificación de fallas y mejoras: Detectar defectos como vibraciones, desviaciones de medida, mala sujeción o acabados deficientes. Reportar fallas en un formato técnico y proponer acciones correctivas.",
             "Seguridad y protección en fresado: Usar adecuadamente equipos de protección personal (monogafas, guantes, protección auditiva). Garantizar buenas prácticas en la manipulación de virutas y refrigerante."
+        ]
+
+        # Actividades para TMMI (RAP 3)
+        actividades_tmmi_rap3 = [
+            "Fabricar elementos mecánicos aplicando procesos de mecanizado con torno convencional."
         ]
 
         if "TOTF" in programa_seleccionado:
@@ -113,13 +118,21 @@ if uploaded_excel is not None:
             else:
                 lista_actividades_base = actividades_totf_rap2
         else:
-            raps_disponibles = sorted(df_filtrado['Resultado de Aprendizaje'].dropna().unique().tolist())
-            raps_seleccionados = st.multiselect(
-                "Selecciona los Resultados de Aprendizaje que deseas incluir en el Plan de Trabajo:",
-                options=raps_disponibles,
-                default=raps_disponibles[:1] if len(raps_disponibles) >= 1 else raps_disponibles
+            # Configuración fija para TMMI
+            competencia_tmmi = st.selectbox(
+                "Selecciona la Competencia:",
+                options=["REPARAR EQUIPOS SEGUN PROCEDIMIENTOS Y MANUALES TECNICOS."],
+                index=0
             )
-            lista_actividades_base = ["Desarrollar actividades de aprendizaje y evidencias prácticas asociadas al RAP."]
+            
+            rap_tmmi_seleccionado = st.selectbox(
+                "Selecciona el Resultado de Aprendizaje (RAP):",
+                options=["OPERAR MÁQUINAS Y HERRAMIENTAS CONVENCIONALES SEGÚN ESPECIFICACIONES TÉCNICAS."],
+                index=0
+            )
+            
+            raps_seleccionados = [rap_tmmi_seleccionado]
+            lista_actividades_base = actividades_tmmi_rap3
 
         # 7. Opciones del Tipo de Plan (Inicial vs Final)
         st.subheader("📋 3. Estado del Plan de Trabajo")
