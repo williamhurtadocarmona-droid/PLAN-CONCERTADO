@@ -5,10 +5,15 @@ import io
 import zipfile
 import re
 import os
-import subprocess
 import tempfile
 
-# PyPDF para unificar archivos PDF
+# ReportLab para la generación técnica del PDF respetando la estructura de la plantilla
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
+# PyPDF para la unificación de páginas
 from pypdf import PdfWriter
 
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
@@ -18,38 +23,6 @@ st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, se
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
-
-def convertir_docx_a_pdf(doc, num_doc):
-    """
-    Convierte un documento python-docx a PDF preservando el formato original mediante LibreOffice.
-    Si LibreOffice no está disponible, genera un PDF básico como respaldo.
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        docx_path = os.path.join(tmpdir, f"temp_{num_doc}.docx")
-        pdf_path = os.path.join(tmpdir, f"temp_{num_doc}.pdf")
-        doc.save(docx_path)
-        
-        # Intentar conversión con LibreOffice (preserva formato 100% fiel)
-        try:
-            cmd = f"libreoffice --headless --convert-to pdf {docx_path} --outdir {tmpdir}"
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    return io.BytesIO(f.read())
-        except Exception:
-            pass
-
-        # Intento alternativo con docx2pdf (si corre en Windows con MS Word)
-        try:
-            from docx2pdf import convert
-            convert(docx_path, pdf_path)
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    return io.BytesIO(f.read())
-        except Exception:
-            pass
-
-    return None
 
 if uploaded_excel is not None:
     try:
@@ -262,120 +235,168 @@ if uploaded_excel is not None:
         
         col_btn1, col_btn2 = st.columns(2)
 
-        def poblar_plantilla_docx(aprendiz):
+        def generar_pdf_fiel_sena(aprendiz):
+            """Genera la estructura oficial del formato SENA directamente en PDF"""
+            pdf_buffer = io.BytesIO()
+            doc_pdf = SimpleDocTemplate(
+                pdf_buffer,
+                pagesize=letter,
+                leftMargin=36,
+                rightMargin=36,
+                topMargin=36,
+                bottomMargin=36
+            )
+
+            styles = getSampleStyleSheet()
+            style_title = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=9, alignment=1, leading=11)
+            style_bold = ParagraphStyle('Bold', fontName='Helvetica-Bold', fontSize=7.5, leading=9.5)
+            style_body = ParagraphStyle('Body', fontName='Helvetica', fontSize=7, leading=9)
+            style_center = ParagraphStyle('Center', fontName='Helvetica', fontSize=7.5, alignment=1, leading=9.5)
+            style_bold_center = ParagraphStyle('BoldCenter', fontName='Helvetica-Bold', fontSize=7.5, alignment=1, leading=9.5)
+
+            elements = []
+
+            # Encabezado Formato Institucional SENA
+            header_table_data = [
+                [
+                    Paragraph("<b>SENA</b><br/><font size=6.5>SERVICIO NACIONAL DE APRENDIZAJE</font>", style_center),
+                    Paragraph("<b>PLAN DE TRABAJO Y RUTA DE APRENDIZAJE</b><br/><font size=7>PROCESO DE GESTIÓN DE LA FORMACIÓN PROFESIONAL INTEGRAL</font>", style_title),
+                    Paragraph(f"<b>{tipo_plan.upper()}</b>", style_bold_center)
+                ]
+            ]
+            t_head = Table(header_table_data, colWidths=[110, 320, 110])
+            t_head.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F0F0F0'))
+            ]))
+            elements.append(t_head)
+            elements.append(Spacer(1, 6))
+
+            # Tabla 1: Datos Generales
+            nombre_comp = f"{aprendiz['Nombre']} {aprendiz['Apellidos']}"
+            tipo_doc = str(aprendiz['Tipo de Documento'])
             num_doc = str(aprendiz['Número de Documento'])
-            doc = Document("Plan de trabajo .docx")
+
+            meta_data = [
+                [Paragraph("<b>Programa de Formación:</b>", style_bold), Paragraph(denominacion_programa, style_body), Paragraph("<b>Ficha:</b>", style_bold), Paragraph(str(numero_ficha), style_body)],
+                [Paragraph("<b>Proyecto Formativo:</b>", style_bold), Paragraph(proyecto_formativo_input, style_body), Paragraph("<b>Fase:</b>", style_bold), Paragraph(fase_proyecto_input, style_body)],
+                [Paragraph("<b>Nombre del Aprendiz:</b>", style_bold), Paragraph(nombre_comp, style_body), Paragraph("<b>Documento:</b>", style_bold), Paragraph(f"{tipo_doc} {num_doc}", style_body)]
+            ]
+            t_meta = Table(meta_data, colWidths=[105, 265, 55, 115])
+            t_meta.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#F8F8F8')),
+                ('BACKGROUND', (2,0), (2,-1), colors.HexColor('#F8F8F8'))
+            ]))
+            elements.append(t_meta)
+            elements.append(Spacer(1, 8))
+
+            # Tabla 2: Descriptores de la Ruta de Aprendizaje
+            rap_actual_str = raps_seleccionados[0] if len(raps_seleccionados) > 0 else ""
             
-            reemplazos = {
-                "«Nombre»": str(aprendiz['Nombre']),
-                "«Apellidos»": str(aprendiz['Apellidos']),
-                "«Tipo_de_Doc»": str(aprendiz['Tipo de Documento']),
-                "«N_Documento»": num_doc,
-                "TECNICO INSTALACION SISTEMAS ELECTRICOS RESIDENCIALES Y COMERCIALES": denominacion_programa,
-                "«Programa»": denominacion_programa,
-                "«Denominacion»": denominacion_programa,
-                "837101": numero_ficha,
-                "«Ficha»": numero_ficha,
-                "«Numero_Ficha»": numero_ficha,
-                "«Proyecto_Formativo»": proyecto_formativo_input,
-                "«Proyecto»": proyecto_formativo_input,
-                "«Fase_Proyecto»": fase_proyecto_input,
-                "«Fase»": fase_proyecto_input,
-            }
-            
-            for p in doc.paragraphs:
-                for k, v in reemplazos.items():
-                    if k in p.text:
-                        p.text = p.text.replace(k, v)
-                        
-            if len(doc.tables) > 0:
-                t0 = doc.tables[0]
-                for row in t0.rows:
-                    for cell in row.cells:
-                        for k, v in reemplazos.items():
-                            if k in cell.text:
-                                cell.text = cell.text.replace(k, v)
+            act_table_data = [
+                [
+                    Paragraph("<b>Resultado de Aprendizaje (RAP)</b>", style_bold_center),
+                    Paragraph("<b>No.</b>", style_bold_center),
+                    Paragraph("<b>Actividades a desarrollar</b>", style_bold_center),
+                    Paragraph("<b>Forma de Entrega</b>", style_bold_center),
+                    "",
+                    Paragraph("<b>Criterios de Evaluación</b>", style_bold_center),
+                    Paragraph("<b>¿Entregó la Actividad?</b>", style_bold_center),
+                    ""
+                ],
+                [
+                    "", "", "",
+                    Paragraph("<b>Física</b>", style_bold_center),
+                    Paragraph("<b>Digital</b>", style_bold_center),
+                    "",
+                    Paragraph("<b>SÍ</b>", style_bold_center),
+                    Paragraph("<b>NO</b>", style_bold_center)
+                ]
+            ]
+
+            es_plan_final = (tipo_plan == "Plan Final")
+
+            for idx, act_desc in enumerate(actividades_desc, 1):
+                ent_fisi = "X" if entrega_por_act[idx-1] == "Física" else ""
+                ent_digi = "X" if entrega_por_act[idx-1] == "Digital" else ""
                 
-                if len(t0.rows) > 2 and len(t0.rows[2].cells) > 5:
-                    if "Proyecto Formativo:" in t0.rows[2].cells[5].text:
-                        t0.rows[2].cells[6].text = proyecto_formativo_input
-                        
-                if len(t0.rows) > 3 and len(t0.rows[3].cells) > 1:
-                    if "Fase del" in t0.rows[3].cells[0].text or "Fase" in t0.rows[3].cells[0].text:
-                        t0.rows[3].cells[1].text = fase_proyecto_input
+                if es_plan_final:
+                    est_si = "X" if estado_entrega_final[idx-1] == "SÍ" else ""
+                    est_no = "X" if estado_entrega_final[idx-1] == "NO" else ""
+                else:
+                    est_si = ""
+                    est_no = ""
 
-            if len(doc.tables) > 1:
-                tabla_actividades = doc.tables[1]
-                rap_actual_str = raps_seleccionados[0] if len(raps_seleccionados) > 0 else ""
-                
-                for i, act_descripcion in enumerate(actividades_desc):
-                    row_idx = i + 3
-                    if row_idx < len(tabla_actividades.rows):
-                        row_cells = tabla_actividades.rows[row_idx].cells
-                        row_cells[0].text = rap_actual_str
-                        row_cells[1].text = str(i + 1)
-                        row_cells[2].text = act_descripcion
-                        
-                        tipo_entrega = entrega_por_act[i]
-                        if tipo_entrega == "Física":
-                            row_cells[3].text = "X"
-                            row_cells[4].text = ""
-                        else:
-                            row_cells[3].text = ""
-                            row_cells[4].text = "X"
+                act_table_data.append([
+                    Paragraph(rap_actual_str if idx == 1 else "", style_body),
+                    Paragraph(str(idx), style_center),
+                    Paragraph(act_desc, style_body),
+                    Paragraph(ent_fisi, style_bold_center),
+                    Paragraph(ent_digi, style_bold_center),
+                    Paragraph("Aplica especificaciones técnicas y criterios de calidad en el proceso.", style_body),
+                    Paragraph(est_si, style_bold_center),
+                    Paragraph(est_no, style_bold_center)
+                ])
 
-                        if tipo_plan == "Plan Final":
-                            entrego = estado_entrega_final[i]
-                            if entrego == "SÍ":
-                                row_cells[7].text = "X"
-                                row_cells[8].text = ""
-                            else:
-                                row_cells[7].text = ""
-                                row_cells[8].text = "X"
-                        else:
-                            row_cells[7].text = ""
-                            row_cells[8].text = ""
+            t_act = Table(act_table_data, colWidths=[125, 25, 185, 35, 35, 75, 30, 30])
+            t_act.setStyle(TableStyle([
+                ('SPAN', (0,0), (0,1)),
+                ('SPAN', (1,0), (1,1)),
+                ('SPAN', (2,0), (2,1)),
+                ('SPAN', (3,0), (4,0)),
+                ('SPAN', (5,0), (5,1)),
+                ('SPAN', (6,0), (7,0)),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BACKGROUND', (0,0), (-1,1), colors.HexColor('#EAEAEA'))
+            ]))
 
-                total_filas_insertadas = len(actividades_desc)
-                for row_to_remove_idx in range(12, total_filas_insertadas + 2, -1):
-                    if row_to_remove_idx < len(tabla_actividades.rows):
-                        tr = tabla_actividades.rows[row_to_remove_idx]._tr
-                        tr.getparent().remove(tr)
+            elements.append(t_act)
+            elements.append(Spacer(1, 18))
 
-            return doc
+            # Sección de Firmas
+            firmas_data = [
+                [
+                    Paragraph("__________________________________________<br/><b>Firma del Aprendiz</b>", style_center),
+                    Paragraph("__________________________________________<br/><b>Firma del Instructor</b>", style_center)
+                ]
+            ]
+            t_firmas = Table(firmas_data, colWidths=[270, 270])
+            t_firmas.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
+            ]))
+            elements.append(KeepTogether([t_firmas]))
 
-        # BOTÓN 1: Generar UN SOLO PDF Unificado conservando la plantilla original
+            doc_pdf.build(elements)
+            pdf_buffer.seek(0)
+            return pdf_buffer
+
+        # BOTÓN 1: Generar UN SOLO PDF Unificado
         with col_btn1:
             if st.button("📄 Generar UN SOLO ARCHIVO PDF Unificado", use_container_width=True):
                 pdf_merger = PdfWriter()
-                converted_count = 0
 
                 for idx, aprendiz in aprendices.iterrows():
-                    num_doc = str(aprendiz['Número de Documento'])
-                    doc_populated = poblar_plantilla_docx(aprendiz)
-                    
-                    pdf_io = convertir_docx_a_pdf(doc_populated, num_doc)
-                    if pdf_io:
-                        pdf_merger.append(pdf_io)
-                        converted_count += 1
+                    pdf_single = generar_pdf_fiel_sena(aprendiz)
+                    pdf_merger.append(pdf_single)
 
-                if converted_count > 0:
-                    final_pdf_buffer = io.BytesIO()
-                    pdf_merger.write(final_pdf_buffer)
-                    pdf_merger.close()
-                    final_pdf_buffer.seek(0)
+                final_pdf_buffer = io.BytesIO()
+                pdf_merger.write(final_pdf_buffer)
+                pdf_merger.close()
+                final_pdf_buffer.seek(0)
 
-                    sigla_prog = programa_seleccionado.split(' - ')[0]
-                    st.download_button(
-                        label="⬇️ Descargar PDF Unificado Completo",
-                        data=final_pdf_buffer.getvalue(),
-                        file_name=f"Planes_Trabajo_UNIFICADO_{sigla_prog}_{tipo_plan.replace(' ', '_')}_Ficha_{numero_ficha}.pdf",
-                        mime="application/pdf"
-                    )
-                else:
-                    st.warning("⚠️ Para convertir a PDF respetando la plantilla original .docx, se requiere tener instalado LibreOffice en el sistema o ejecutar en Windows con MS Word. Puedes descargar los archivos en formato ZIP (.docx).")
+                sigla_prog = programa_seleccionado.split(' - ')[0]
+                st.download_button(
+                    label="⬇️ Descargar PDF Unificado Completo",
+                    data=final_pdf_buffer.getvalue(),
+                    file_name=f"Planes_Trabajo_UNIFICADO_{sigla_prog}_{tipo_plan.replace(' ', '_')}_Ficha_{numero_ficha}.pdf",
+                    mime="application/pdf"
+                )
 
-        # BOTÓN 2: Generar Planes en ZIP (.docx individuales con la plantilla original)
+        # BOTÓN 2: Generar Planes en ZIP (.docx individuales)
         with col_btn2:
             if st.button("📦 Generar Planes en ZIP (.docx indv.)", use_container_width=True):
                 zip_buffer = io.BytesIO()
@@ -383,10 +404,86 @@ if uploaded_excel is not None:
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                     for idx, aprendiz in aprendices.iterrows():
                         num_doc = str(aprendiz['Número de Documento'])
-                        doc_populated = poblar_plantilla_docx(aprendiz)
+                        doc = Document("Plan de trabajo .docx")
+                        
+                        reemplazos = {
+                            "«Nombre»": str(aprendiz['Nombre']),
+                            "«Apellidos»": str(aprendiz['Apellidos']),
+                            "«Tipo_de_Doc»": str(aprendiz['Tipo de Documento']),
+                            "«N_Documento»": num_doc,
+                            "TECNICO INSTALACION SISTEMAS ELECTRICOS RESIDENCIALES Y COMERCIALES": denominacion_programa,
+                            "«Programa»": denominacion_programa,
+                            "«Denominacion»": denominacion_programa,
+                            "837101": numero_ficha,
+                            "«Ficha»": numero_ficha,
+                            "«Numero_Ficha»": numero_ficha,
+                            "«Proyecto_Formativo»": proyecto_formativo_input,
+                            "«Proyecto»": proyecto_formativo_input,
+                            "«Fase_Proyecto»": fase_proyecto_input,
+                            "«Fase»": fase_proyecto_input,
+                        }
+                        
+                        for p in doc.paragraphs:
+                            for k, v in reemplazos.items():
+                                if k in p.text:
+                                    p.text = p.text.replace(k, v)
+                                    
+                        if len(doc.tables) > 0:
+                            t0 = doc.tables[0]
+                            for row in t0.rows:
+                                for cell in row.cells:
+                                    for k, v in reemplazos.items():
+                                        if k in cell.text:
+                                            cell.text = cell.text.replace(k, v)
+                            
+                            if len(t0.rows) > 2 and len(t0.rows[2].cells) > 5:
+                                if "Proyecto Formativo:" in t0.rows[2].cells[5].text:
+                                    t0.rows[2].cells[6].text = proyecto_formativo_input
+                                    
+                            if len(t0.rows) > 3 and len(t0.rows[3].cells) > 1:
+                                if "Fase del" in t0.rows[3].cells[0].text or "Fase" in t0.rows[3].cells[0].text:
+                                    t0.rows[3].cells[1].text = fase_proyecto_input
+
+                        if len(doc.tables) > 1:
+                            tabla_actividades = doc.tables[1]
+                            rap_actual_str = raps_seleccionados[0] if len(raps_seleccionados) > 0 else ""
+                            
+                            for i, act_descripcion in enumerate(actividades_desc):
+                                row_idx = i + 3
+                                if row_idx < len(tabla_actividades.rows):
+                                    row_cells = tabla_actividades.rows[row_idx].cells
+                                    row_cells[0].text = rap_actual_str
+                                    row_cells[1].text = str(i + 1)
+                                    row_cells[2].text = act_descripcion
+                                    
+                                    tipo_entrega = entrega_por_act[i]
+                                    if tipo_entrega == "Física":
+                                        row_cells[3].text = "X"
+                                        row_cells[4].text = ""
+                                    else:
+                                        row_cells[3].text = ""
+                                        row_cells[4].text = "X"
+
+                                    if tipo_plan == "Plan Final":
+                                        entrego = estado_entrega_final[i]
+                                        if entrego == "SÍ":
+                                            row_cells[7].text = "X"
+                                            row_cells[8].text = ""
+                                        else:
+                                            row_cells[7].text = ""
+                                            row_cells[8].text = "X"
+                                    else:
+                                        row_cells[7].text = ""
+                                        row_cells[8].text = ""
+
+                            total_filas_insertadas = len(actividades_desc)
+                            for row_to_remove_idx in range(12, total_filas_insertadas + 2, -1):
+                                if row_to_remove_idx < len(tabla_actividades.rows):
+                                    tr = tabla_actividades.rows[row_to_remove_idx]._tr
+                                    tr.getparent().remove(tr)
 
                         doc_io = io.BytesIO()
-                        doc_populated.save(doc_io)
+                        doc.save(doc_io)
                         doc_io.seek(0)
                         
                         sigla_prog = programa_seleccionado.split(' - ')[0]
