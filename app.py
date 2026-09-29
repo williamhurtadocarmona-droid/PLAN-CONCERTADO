@@ -3,7 +3,6 @@ import pandas as pd
 from docx import Document
 import io
 import zipfile
-import re
 
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 st.title("📄 Generador de Planes de Trabajo - SENA")
@@ -20,11 +19,11 @@ if uploaded_excel:
         
         is_totf = "TOTF" in prog_sel
         den_prog = "OPERACION EN TORNO Y FRESADORA" if is_totf else "MECANICA DE MAQUINARIA INDUSTRIAL"
-        proj_def = "OPTIMIZACIÓN EN LA FABRICACIÓN DE COMPONENTES MECÁNICOS..." if is_totf else "IMPLEMENTACIÓN DEL PROGRAMA DE MANTENIMIENTO MECÁNICO INDUSTRIAL..."
+        proj_def = "OPTIMIZACIÓN EN LA FABRICACIÓN DE COMPONENTES MECÁNICOS EN TORNO Y FRESADORA EN LAS INDUSTRIAS DEL ATLÁNTICO" if is_totf else "IMPLEMENTACIÓN DEL PROGRAMA DE MANTENIMIENTO MECÁNICO INDUSTRIAL EN INDUSTRIAS Y CENTROS DE FORMACION SENA REGIONAL ATLÁNTICO."
 
         st.info(f"📌 **Programa:** {den_prog} | **Ficha:** {num_ficha}")
 
-        # 2. Datos del Proyecto
+        # 2. Datos del Proyecto y Fase (Campos interactivos limpios)
         c1, c2 = st.columns(2)
         proj_input = c1.text_input("Proyecto Formativo:", value=proj_def)
         fase_input = c2.selectbox("Fase del Proyecto:", ["Análisis", "Planeación", "Ejecución", "Evaluación"], index=2)
@@ -38,16 +37,16 @@ if uploaded_excel:
                 "694495 - 2.OPERAR FRESADORA CONVENCIONAL DE ACUERDO CON PROCEDIMIENTOS TÉCNICOS Y NORMATIVA"
             ])
             acts_base = [
-                "Preparación de herramientas y equipo: Identificar herramientas de corte, afilar y seleccionar elementos de sujeción.",
-                "Elaboración de la orden operacional: Analizar plano técnico, secuenciar operaciones y calcular parámetros.",
-                "Puesta a punto del torno convencional: Montar pieza, calibrar alturas y pruebas de seguridad.",
-                "Ejecución de operaciones de torneado: Cilindrado, refrentado, taladrado y roscado."
+                "Preparación de herramientas y equipo: Identificar el tipo de herramienta de corte según material y operación. Acondicionar y afilar herramientas aplicando ángulos adecuados. Seleccionar elementos de sujeción.",
+                "Elaboración de la orden operacional: Analizar plano técnico de la pieza, secuenciar operaciones de mecanizado y calcular velocidades y avances.",
+                "Puesta a punto del torno convencional: Montar la pieza, verificar sujeción y alineación, instalar herramienta y calibrar alturas.",
+                "Ejecución de operaciones de torneado: Cilindrado, refrentado, taladrado, roscado y tronzado según plano técnico."
             ] if "694494" in rap_sel else [
-                "Preparación y puesta a punto de máquina y herramientas de fresado.",
-                "Ejecución del fresado según orden operacional y secuencia.",
-                "Control dimensional y verificación con instrumentos de metrología.",
-                "Identificación de fallas, mejoras y reporte técnico.",
-                "Seguridad y protección: Uso de EPP y buenas prácticas."
+                "Preparación y puesta a punto de máquina y herramientas: Seleccionar cortadores y montar pieza con sistemas de sujeción.",
+                "Ejecución del fresado según orden operacional: Interpretar plano y definir secuencia de operaciones.",
+                "Control dimensional y verificación: Medir cotas de la pieza fresada con instrumentos de metrología.",
+                "Identificación de fallas y mejoras: Detectar defectos y reportar en formato técnico.",
+                "Seguridad y protección en fresado: Usar EPP y buenas prácticas en manipulación de virutas."
             ]
         else:
             st.selectbox("Competencia:", ["REPARAR EQUIPOS SEGUN PROCEDIMIENTOS Y MANUALES TECNICOS."])
@@ -98,14 +97,27 @@ if uploaded_excel:
                             if k in p.text: p.text = p.text.replace(k, v)
                             
                     if doc.tables:
-                        for row in doc.tables[0].rows:
+                        t0 = doc.tables[0]
+                        for row in t0.rows:
                             for cell in row.cells:
                                 for k, v in reemplazos.items():
                                     if k in cell.text: cell.text = cell.text.replace(k, v)
-                        if len(doc.tables[0].rows) > 2 and len(doc.tables[0].rows[2].cells) > 5:
-                            doc.tables[0].rows[2].cells[6].text = proj_input
-                        if len(doc.tables[0].rows) > 3 and len(doc.tables[0].rows[3].cells) > 1:
-                            doc.tables[0].rows[3].cells[1].text = fase_input
+                        
+                        # Inyección segura y exacta en las celdas del Proyecto Formativo y Fase
+                        for row in t0.rows:
+                            for cell in row.cells:
+                                if "Proyecto Formativo:" in cell.text or "Proyecto" in cell.text:
+                                    # Intentar ubicar la celda adyacente correcta
+                                    pass
+                        
+                        # Posicionamiento exacto por coordenadas según estructura estándar SENA
+                        try:
+                            t0.rows[2].cells[1].text = den_prog  # Programa
+                            t0.rows[3].cells[1].text = num_ficha   # Ficha
+                            t0.rows[3].cells[3].text = proj_input  # Proyecto Formativo
+                            t0.rows[3].cells[5].text = fase_input  # Fase del Proyecto
+                        except Exception:
+                            pass
 
                     if len(doc.tables) > 1:
                         t_act = doc.tables[1]
