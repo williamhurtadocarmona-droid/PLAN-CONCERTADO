@@ -29,7 +29,13 @@ if uploaded_excel:
         proj_input = c1.text_input("Proyecto Formativo:", value=proj_def)
         fase_input = c2.selectbox("Fase del Proyecto:", ["Análisis", "Planeación", "Ejecución", "Evaluación"], index=2)
 
-        # 3. Selección y Actividades
+        # 3. Selección de Fechas Globales (Concertada y Final)
+        st.subheader("📅 Fechas del Plan de Trabajo")
+        f_col1, f_col2 = st.columns(2)
+        fecha_concertada = f_col1.date_input("Fecha Concertada (Inicio):", value=date.today())
+        fecha_final = f_col2.date_input("Fecha Final de Entrega:", value=date.today())
+
+        # 4. Selección y Actividades
         st.subheader("🎯 Competencia y Actividades")
         if is_totf:
             st.selectbox("Competencia:", ["290201211 - MECANIZAR PIEZA INDUSTRIAL DE ACUERDO CON TÉCNICAS MANUALES Y SEMIAUTOMÁTICAS"])
@@ -54,28 +60,23 @@ if uploaded_excel:
             rap_sel = st.selectbox("Resultado de Aprendizaje (RAP):", ["OPERAR MÁQUINAS Y HERRAMIENTAS CONVENCIONALES SEGÚN ESPECIFICACIONES TÉCNICAS."])
             acts_base = ["Fabricar elementos mecánicos aplicando procesos de mecanizado con torno convencional."]
 
-        # 4. Estado y Configuración Masiva
+        # 5. Estado y Configuración Masiva
         tipo_plan = st.radio("Momento del Plan:", ["Plan Inicial", "Plan Final"], horizontal=True)
         m1, m2 = st.columns(2)
         ent_masiva = m1.selectbox("Forma de Entrega masiva:", ["Personalizar", "Física (Todas)", "Digital (Todas)"])
         est_masiva = m2.selectbox("Estado masivo (Plan Final):", ["Personalizar", "SÍ (Todos)", "NO (Ninguno)"]) if tipo_plan == "Plan Final" else "Personalizar"
 
-        # 5. Detalle de Actividades (Descripción, Entrega, Estado y Fechas)
-        st.subheader("📝 Configuración de Actividades y Fechas")
-        acts_desc, ent_act, est_act, fechas_act = [], [], [], []
+        # 6. Detalle de Actividades
+        st.subheader("📝 Configuración de Actividades")
+        acts_desc, ent_act, est_act = [], [], []
         
         for i, txt in enumerate(acts_base, 1):
             st.markdown(f"--- **Actividad {i}** ---")
-            cols = st.columns([2, 1, 1, 1] if tipo_plan == "Plan Final" else [3, 1, 1])
-            
+            cols = st.columns(3 if tipo_plan == "Plan Final" else 2)
             acts_desc.append(cols[0].text_area(f"Desc {i}", value=txt, height=75, label_visibility="collapsed"))
             ent_act.append(cols[1].radio(f"Ent {i}", ["Física", "Digital"], index=0 if "Física" in ent_masiva else 1, horizontal=True))
-            
             if tipo_plan == "Plan Final":
                 est_act.append(cols[2].radio(f"Est {i}", ["SÍ", "NO"], index=0 if "SÍ" in est_masiva else 1, horizontal=True))
-                fechas_act.append(cols[3].date_input(f"Fecha {i}", value=date.today()))
-            else:
-                fechas_act.append(cols[2].date_input(f"Fecha {i}", value=date.today()))
 
         df_raw = pd.read_excel(uploaded_excel, skiprows=12)
         df_raw.columns = [str(c).strip() for c in df_raw.columns]
@@ -83,7 +84,7 @@ if uploaded_excel:
 
         st.success(f"✅ Aprendices detectados: **{len(aprendices)}**")
 
-        # 6. Generación del ZIP
+        # 7. Generación del ZIP
         if st.button("📦 Generar y Descargar Planes en ZIP (Word Original)", use_container_width=True):
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
@@ -111,7 +112,7 @@ if uploaded_excel:
                                 for k, v in reemplazos.items():
                                     if k in cell.text: cell.text = cell.text.replace(k, v)
                         
-                        # Búsqueda inteligente de celdas para Proyecto y Fase
+                        # Búsqueda inteligente para Proyecto y Fase
                         for row in t0.rows:
                             for c_idx, cell in enumerate(row.cells):
                                 txt_celda = cell.text.strip().upper()
@@ -124,6 +125,9 @@ if uploaded_excel:
 
                     if len(doc.tables) > 1:
                         t_act = doc.tables[1]
+                        f_conc_str = fecha_concertada.strftime("%d/%m/%Y")
+                        f_fin_str = fecha_final.strftime("%d/%m/%Y")
+
                         for idx, desc in enumerate(acts_desc):
                             r_idx = idx + 3
                             if r_idx < len(t_act.rows):
@@ -134,12 +138,15 @@ if uploaded_excel:
                                 cells[3].text = "X" if ent_act[idx] == "Física" else ""
                                 cells[4].text = "" if ent_act[idx] == "Física" else "X"
                                 
-                                # Rellenar la columna de Fecha de recolección de evidencias (habitualmente última columna de la tabla)
-                                fecha_str = fechas_act[idx].strftime("%d/%m/%Y")
-                                if len(cells) > 9:
-                                    cells[9].text = fecha_str
+                                # Asignación de fechas (Concertada y Final en las columnas correspondientes)
+                                # Ajusta los índices de columna según tu plantilla institucional exacta
+                                if len(cells) >= 11:
+                                    cells[9].text = f_conc_str
+                                    cells[10].text = f_fin_str
+                                elif len(cells) >= 10:
+                                    cells[9].text = f_fin_str
                                 elif len(cells) > 6:
-                                    cells[-1].text = fecha_str
+                                    cells[-1].text = f_fin_str
 
                                 if tipo_plan == "Plan Final":
                                     cells[7].text = "X" if est_act[idx] == "SÍ" else ""
