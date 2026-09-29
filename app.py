@@ -4,11 +4,8 @@ from docx import Document
 import io
 import zipfile
 import re
-import os
-import tempfile
-import subprocess
 
-# PyPDF para la unificación de páginas
+# PyPDF para unificar páginas
 from pypdf import PdfWriter
 
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
@@ -18,50 +15,6 @@ st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, se
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
-
-def convertir_docx_fiel_a_pdf(doc_bytes_io):
-    """
-    Convierte el archivo Word (.docx) poblado directamente a PDF para preservar 
-    el logo oficial SENA, colores, bordes y tipografía exacta.
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        docx_path = os.path.join(tmpdir, "documento_sena.docx")
-        pdf_path = os.path.join(tmpdir, "documento_sena.pdf")
-        
-        with open(docx_path, "wb") as f:
-            f.write(doc_bytes_io.getvalue())
-
-        # 1. Intentar con LibreOffice (Sistemas Linux / Servidor / Streamlit Cloud)
-        try:
-            cmd = f"libreoffice --headless --convert-to pdf {docx_path} --outdir {tmpdir}"
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    return io.BytesIO(f.read())
-        except Exception:
-            pass
-
-        # 2. Intentar con soffice
-        try:
-            cmd = f"soffice --headless --convert-to pdf {docx_path} --outdir {tmpdir}"
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    return io.BytesIO(f.read())
-        except Exception:
-            pass
-
-        # 3. Intentar con docx2pdf (Entornos Windows con MS Word)
-        try:
-            from docx2pdf import convert
-            convert(docx_path, pdf_path)
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    return io.BytesIO(f.read())
-        except Exception:
-            pass
-
-    return None
 
 if uploaded_excel is not None:
     try:
@@ -274,7 +227,7 @@ if uploaded_excel is not None:
         
         col_btn1, col_btn2 = st.columns(2)
 
-        def generar_doc_original_poblado(aprendiz):
+        def generar_documento_poblado(aprendiz):
             num_doc = str(aprendiz['Número de Documento'])
             
             # Carga la plantilla oficial en Word respetando logo SENA, colores e imágenes
@@ -356,54 +309,25 @@ if uploaded_excel is not None:
                         tr = tabla_actividades.rows[row_to_remove_idx]._tr
                         tr.getparent().remove(tr)
 
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            return doc_io
+            return doc
 
-        # BOTÓN 1: Generar PDF Unificado desde la plantilla original
+        # BOTÓN 1: Generar Planes en ZIP (.docx con plantilla original completa)
         with col_btn1:
-            if st.button("📄 Generar UN SOLO ARCHIVO PDF Unificado", use_container_width=True):
-                pdf_merger = PdfWriter()
-                converted_count = 0
-
-                for idx, aprendiz in aprendices.iterrows():
-                    doc_bytes = generar_doc_original_poblado(aprendiz)
-                    pdf_io = convertir_docx_fiel_a_pdf(doc_bytes)
-                    
-                    if pdf_io:
-                        pdf_merger.append(pdf_io)
-                        converted_count += 1
-
-                if converted_count > 0:
-                    final_pdf_buffer = io.BytesIO()
-                    pdf_merger.write(final_pdf_buffer)
-                    pdf_merger.close()
-                    final_pdf_buffer.seek(0)
-
-                    sigla_prog = programa_seleccionado.split(' - ')[0]
-                    st.download_button(
-                        label="⬇️ Descargar PDF Unificado Completo (Original SENA)",
-                        data=final_pdf_buffer.getvalue(),
-                        file_name=f"Planes_Trabajo_UNIFICADO_{sigla_prog}_{tipo_plan.replace(' ', '_')}_Ficha_{numero_ficha}.pdf",
-                        mime="application/pdf"
-                    )
-                else:
-                    st.error("⚠️ Para convertir los documentos de Word a PDF manteniendo exactamente el logo SENA y el formato institucional original, instala LibreOffice en tu servidor ejecutando: `apt-get install -y libreoffice` (en Linux/Docker) o instala Microsoft Word en Windows.")
-
-        # BOTÓN 2: Generar Planes en ZIP (.docx con plantilla original completa)
-        with col_btn2:
             if st.button("📦 Generar Planes en ZIP (.docx indv.)", use_container_width=True):
                 zip_buffer = io.BytesIO()
                 
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                     for idx, aprendiz in aprendices.iterrows():
                         num_doc = str(aprendiz['Número de Documento'])
-                        doc_bytes = generar_doc_original_poblado(aprendiz)
+                        doc_poblado = generar_documento_poblado(aprendiz)
+                        
+                        doc_io = io.BytesIO()
+                        doc_poblado.save(doc_io)
+                        doc_io.seek(0)
                         
                         sigla_prog = programa_seleccionado.split(' - ')[0]
                         filename = f"Plan_Trabajo_{sigla_prog}_{num_doc}_{aprendiz['Nombre']}_{aprendiz['Apellidos']}.docx"
-                        zip_file.writestr(filename, doc_bytes.getvalue())
+                        zip_file.writestr(filename, doc_io.getvalue())
                 
                 sigla_prog = programa_seleccionado.split(' - ')[0]
                 st.download_button(
