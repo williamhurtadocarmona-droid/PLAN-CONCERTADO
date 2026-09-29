@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from docx import Document
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 import io
 import zipfile
 from datetime import date
@@ -78,9 +80,12 @@ if uploaded_excel:
 
         st.success(f"✅ Aprendices detectados: **{len(aprendices)}**")
 
-        if st.button("📦 Generar y Descargar Planes en ZIP (Word Original)", use_container_width=True):
+        col_btn1, col_btn2 = st.columns(2)
+
+        # Botón 1: ZIP con archivos individuales (Tu función original optimizada)
+        if col_btn1.button("📦 Generar ZIP (Archivos Individuales)", use_container_width=True):
             zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                 for _, ap in aprendices.iterrows():
                     doc = Document("Plan de trabajo .docx")
                     
@@ -151,6 +156,93 @@ if uploaded_excel:
                     zip_file.writestr(f"Plan_Trabajo_{sigla}_{ap['Número de Documento']}_{ap['Nombre']}_{ap['Apellidos']}.docx", doc_io.getvalue())
 
             st.download_button("⬇️ Descargar Archivo ZIP", data=zip_buffer.getvalue(), file_name=f"Planes_Trabajo_{prog_sel.split(' - ')[0]}_{tipo_plan.replace(' ', '_')}_Ficha_{num_ficha}.zip", mime="application/zip")
+
+        # Botón 2: Único Documento Word Consolidado (Todos los aprendices juntos con salto de página)
+        if col_btn2.button("📑 Generar Archivo Único (Todos en un Word)", use_container_width=True):
+            master_doc = None
+            
+            for index, ap in aprendices.iterrows():
+                doc = Document("Plan de trabajo .docx")
+                
+                reemplazos = {
+                    "«Nombre»": str(ap['Nombre']), "«Apellidos»": str(ap['Apellidos']),
+                    "«Tipo_de_Doc»": str(ap['Tipo de Documento']), "«N_Documento»": str(ap['Número de Documento']),
+                    "TECNICO INSTALACION SISTEMAS ELECTRICOS RESIDENCIALES Y COMERCIALES": den_prog,
+                    "«Programa»": den_prog, "«Denominacion»": den_prog,
+                    "837101": num_ficha, "«Ficha»": num_ficha, "«Numero_Ficha»": num_ficha,
+                    "«Proyecto_Formativo»": proj_input, "«Proyecto»": proj_input,
+                    "«Fase_Proyecto»": fase_input, "«Fase»": fase_input
+                }
+                
+                for p in doc.paragraphs:
+                    for k, v in reemplazos.items():
+                        if k in p.text: p.text = p.text.replace(k, v)
+                        
+                if doc.tables:
+                    t0 = doc.tables[0]
+                    for row in t0.rows:
+                        for cell in row.cells:
+                            for k, v in reemplazos.items():
+                                if k in cell.text: cell.text = cell.text.replace(k, v)
+                    
+                    for row in t0.rows:
+                        for c_idx, cell in enumerate(row.cells):
+                            txt_celda = cell.text.strip().upper()
+                            if "PROYECTO FORMATIVO" in txt_celda or txt_celda == "PROYECTO FORMATIVO:":
+                                if c_idx + 1 < len(row.cells):
+                                    row.cells[c_idx + 1].text = proj_input
+                            if "FASE DEL PROYECTO" in txt_celda or "FASE" in txt_celda:
+                                if c_idx + 1 < len(row.cells):
+                                    row.cells[c_idx + 1].text = fase_input
+
+                if len(doc.tables) > 1:
+                    t_act = doc.tables[1]
+                    f_conc_str = fecha_concertada.strftime("%d/%m/%Y")
+                    f_fin_str = fecha_final.strftime("%d/%m/%Y")
+
+                    for idx, desc in enumerate(acts_desc):
+                        r_idx = idx + 3
+                        if r_idx < len(t_act.rows):
+                            cells = t_act.rows[r_idx].cells
+                            cells[0].text = rap_sel
+                            cells[1].text = str(idx + 1)
+                            cells[2].text = desc
+                            cells[3].text = "X" if ent_act[idx] == "Física" else ""
+                            cells[4].text = "" if ent_act[idx] == "Física" else "X"
+                            cells[5].text = f_conc_str
+                            cells[6].text = f_fin_str
+
+                            if tipo_plan == "Plan Final":
+                                cells[7].text = "X" if est_act[idx] == "SÍ" else ""
+                                cells[8].text = "X" if est_act[idx] == "NO" else ""
+                            else:
+                                cells[7].text = ""
+                                cells[8].text = ""
+
+                    for r_rm in range(12, len(acts_desc) + 2, -1):
+                        if r_rm < len(t_act.rows):
+                            tr = t_act.rows[r_rm]._tr
+                            tr.getparent().remove(tr)
+
+                # Si es el primer documento, lo tomamos como base; si no, le agregamos un salto de página y anexamos su contenido
+                if master_doc is None:
+                    master_doc = doc
+                else:
+                    master_doc.add_page_break()
+                    for element in doc.element.body:
+                        master_doc.element.body.append(element)
+
+            # Guardar el documento consolidado
+            master_io = io.BytesIO()
+            master_doc.save(master_io)
+            sigla = prog_sel.split(' - ')[0]
+            
+            st.download_button(
+                "⬇️ Descargar Word Consolidado (Todos en uno)", 
+                data=master_io.getvalue(), 
+                file_name=f"Plan_Trabajo_Consolidado_{sigla}_Ficha_{num_ficha}.docx", 
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
 
     except Exception as e:
         st.error(f"Error al procesar: {e}")
