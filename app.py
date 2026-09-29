@@ -44,7 +44,7 @@ def cargar_mapa_planeacion():
                         if curr_rap and val_act and val_act != 'nan':
                             clean_act = " ".join(val_act.split())
                             totf_map[curr_rap] = clean_act
-    except Exception as e:
+    except Exception:
         pass
     return totf_map
 
@@ -67,22 +67,19 @@ if uploaded_excel is not None:
         # 2. Extraer metadatos exactos del Excel (filas 0 a 11)
         df_meta = pd.read_excel(uploaded_excel, header=None, nrows=12)
         
-        denominacion_programa = ""
         numero_ficha = ""
-        
         for idx, row in df_meta.iterrows():
             label = str(row[0]).strip()
             if label == "Ficha de Caracterización:":
                 numero_ficha = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
-            elif label == "Denominación:":
-                denominacion_programa = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
 
-        # Si se selecciona TOTF, asigna valores predeterminados de TOTF
+        # Configuración automática de Programa y Proyecto según la selección (TOTF o TMMI)
         if "TOTF" in programa_seleccionado:
             denominacion_programa = "OPERACION EN TORNO Y FRESADORA"
             proyecto_default = "OPTIMIZACIÓN EN LA FABRICACIÓN DE COMPONENTES MECÁNICOS EN TORNO Y FRESADORA EN LAS INDUSTRIAS DEL ATLÁNTICO"
         else:
-            proyecto_default = ""
+            denominacion_programa = "MECANICA DE MAQUINARIA INDUSTRIAL"
+            proyecto_default = "IMPLEMENTACIÓN DEL PROGRAMA DE MANTENIMIENTO MECÁNICO INDUSTRIAL EN INDUSTRIAS Y CENTROS DE FORMACION SENA REGIONAL ATLÁNTICO."
 
         st.info(f"📌 **Especialidad:** {programa_seleccionado} | **Programa de Formación:** {denominacion_programa} | **Ficha:** {numero_ficha}")
 
@@ -102,7 +99,7 @@ if uploaded_excel is not None:
                 "Proyecto Formativo:",
                 value=proyecto_default,
                 placeholder="Escribe el nombre del Proyecto Formativo...",
-                help="Se autocompleta cuando seleccionas TOTF."
+                help="Se autocompleta automáticamente según la opción seleccionada (TOTF o TMMI)."
             )
             
         with col_proj2:
@@ -172,20 +169,19 @@ if uploaded_excel is not None:
             idx_entrega_default = 0 if "Física" in entrega_masiva else 1
             idx_estado_default = 0 if "SÍ" in estado_masivo else 1
 
-            # Función para buscar la actividad predeterminada según el RAP
+            # Función para buscar la actividad predeterminada según el RAP y Programa
             def obtener_actividad_predeterminada(rap_str):
                 if "TOTF" in programa_seleccionado and totf_actividades_map:
-                    # Búsqueda exacta primero
                     if rap_str in totf_actividades_map:
                         return totf_actividades_map[rap_str]
-                    # Búsqueda por código de 6 dígitos
                     m = re.search(r'\d{6}', rap_str)
                     if m:
                         code = m.group(0)
                         for k_map, v_map in totf_actividades_map.items():
                             if code in k_map:
                                 return v_map
-                return f"Desarrollar guía de aprendizaje y evidencias prácticas de: {rap_str.split('-')[-1].strip()}"
+                # Descripción por defecto para TMMI o RAPs sin coincidencia exacta
+                return f"Desarrollar guía de aprendizaje y evidencias prácticas asociadas a: {rap_str.split('-')[-1].strip()}"
 
             for i, rap in enumerate(raps_seleccionados, 1):
                 st.markdown("---")
