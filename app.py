@@ -118,7 +118,7 @@ if uploaded_excel is not None:
             else:
                 lista_actividades_base = actividades_totf_rap2
         else:
-            # Configuración fija para TMMI
+            # Configuración única fija para TMMI
             competencia_tmmi = st.selectbox(
                 "Selecciona la Competencia:",
                 options=["REPARAR EQUIPOS SEGUN PROCEDIMIENTOS Y MANUALES TECNICOS."],
@@ -288,7 +288,7 @@ if uploaded_excel is not None:
                                 # Columna 2: Actividades a desarrollar
                                 row_cells[2].text = act_descripcion
                                 
-                                # Columna 3 y 4: Forma de Entrega
+                                # Columna 3 y 4: Forma de Entrega (Física / Digital)
                                 tipo_entrega = entrega_por_act[i]
                                 if tipo_entrega == "Física":
                                     row_cells[3].text = "X"
@@ -297,7 +297,7 @@ if uploaded_excel is not None:
                                     row_cells[3].text = ""
                                     row_cells[4].text = "X"
 
-                                # Columna 7 y 8: Estado de Entrega (SI / NO)
+                                # Columna 7 y 8: Estado de Entrega (¿Entregó la Actividad? SI / NO)
                                 if tipo_plan == "Plan Final":
                                     entrego = estado_entrega_final[i]
                                     if entrego == "SÍ":
@@ -307,28 +307,9 @@ if uploaded_excel is not None:
                                         row_cells[7].text = ""
                                         row_cells[8].text = "X"
                                 else:
-                                    # Plan Inicial
-                                    m_code = re.search(r'\d{6}', rap_actual_str)
-                                    code = m_code.group(0) if m_code else ""
-                                    
-                                    fila_rap = pd.DataFrame()
-                                    if code:
-                                        fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'].astype(str).str.contains(code, na=False)]
-                                    
-                                    if fila_rap.empty:
-                                        fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual_str]
-                                        
-                                    if not fila_rap.empty:
-                                        juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
-                                        if "APROBADO" in juicio:
-                                            row_cells[7].text = "X"
-                                            row_cells[8].text = ""
-                                        else:
-                                            row_cells[7].text = ""
-                                            row_cells[8].text = "X"
-                                    else:
-                                        row_cells[7].text = ""
-                                        row_cells[8].text = "X"
+                                    # Plan Inicial: Se dejan totalmente en blanco (vacías)
+                                    row_cells[7].text = ""
+                                    row_cells[8].text = ""
 
                         # Eliminar filas sobrantes en la tabla Word
                         total_filas_insertadas = len(actividades_desc)
