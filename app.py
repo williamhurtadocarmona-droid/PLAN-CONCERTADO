@@ -110,16 +110,37 @@ if uploaded_excel is not None:
                 help="Selecciona la Fase del Proyecto correspondiente."
             )
 
-        # 6. Obtener lista de Resultados de Aprendizaje (RAPs) disponibles
-        raps_disponibles = sorted(df_filtrado['Resultado de Aprendizaje'].dropna().unique().tolist())
+        # 6. Selección de Competencia y Resultados de Aprendizaje (RAP)
+        st.subheader("🎯 2. Selección de Competencia y Resultados de Aprendizaje (RAP)")
         
-        st.subheader("🎯 2. Selección de Resultados de Aprendizaje (RAP)")
-        raps_seleccionados = st.multiselect(
-            "Selecciona los Resultados de Aprendizaje que deseas incluir en el Plan de Trabajo:",
-            options=raps_disponibles,
-            default=raps_disponibles[:3] if len(raps_disponibles) >= 3 else raps_disponibles,
-            help="Puedes seleccionar hasta 10 RAPs."
-        )
+        if "TOTF" in programa_seleccionado:
+            # Competencia fija para TOTF
+            competencia_totf = st.selectbox(
+                "Selecciona la Competencia:",
+                options=["290201211 - MECANIZAR PIEZA INDUSTRIAL DE ACUERDO CON TÉCNICAS MANUALES Y SEMIAUTOMÁTICAS"],
+                index=0
+            )
+            
+            opciones_raps_totf = [
+                "694494 - 1.OPERAR TORNO CONVENCIONAL DE ACUERDO CON PROCEDIMIENTOS TÉCNICOS Y NORMATIVA.",
+                "694495 - 2.OPERAR FRESADORA CONVENCIONAL DE ACUERDO CON PROCEDIMIENTOS TÉCNICOS Y NORMATIVA"
+            ]
+            
+            raps_seleccionados = st.multiselect(
+                "Selecciona los Resultados de Aprendizaje (RAP):",
+                options=opciones_raps_totf,
+                default=opciones_raps_totf,
+                help="Puedes seleccionar uno o ambos RAPs de TOTF."
+            )
+        else:
+            # Flujo general para TMMI
+            raps_disponibles = sorted(df_filtrado['Resultado de Aprendizaje'].dropna().unique().tolist())
+            raps_seleccionados = st.multiselect(
+                "Selecciona los Resultados de Aprendizaje que deseas incluir en el Plan de Trabajo:",
+                options=raps_disponibles,
+                default=raps_disponibles[:3] if len(raps_disponibles) >= 3 else raps_disponibles,
+                help="Puedes seleccionar hasta 10 RAPs."
+            )
 
         num_raps = len(raps_seleccionados)
 
@@ -180,7 +201,6 @@ if uploaded_excel is not None:
                         for k_map, v_map in totf_actividades_map.items():
                             if code in k_map:
                                 return v_map
-                # Descripción por defecto para TMMI o RAPs sin coincidencia exacta
                 return f"Desarrollar guía de aprendizaje y evidencias prácticas asociadas a: {rap_str.split('-')[-1].strip()}"
 
             for i, rap in enumerate(raps_seleccionados, 1):
@@ -325,8 +345,17 @@ if uploaded_excel is not None:
                                             row_cells[7].text = ""   # Columna 7: SI
                                             row_cells[8].text = "X"  # Columna 8: NO
                                     else:
-                                        # Plan Inicial: Lee el reporte del Excel
-                                        fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
+                                        # Plan Inicial: Busca coincidencia parcial/código en el Excel
+                                        m_code = re.search(r'\d{6}', rap_actual)
+                                        code = m_code.group(0) if m_code else ""
+                                        
+                                        fila_rap = pd.DataFrame()
+                                        if code:
+                                            fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'].astype(str).str.contains(code, na=False)]
+                                        
+                                        if fila_rap.empty:
+                                            fila_rap = df_aprendiz[df_aprendiz['Resultado de Aprendizaje'] == rap_actual]
+                                            
                                         if not fila_rap.empty:
                                             juicio = str(fila_rap.iloc[0]['Juicio de Evaluación']).upper()
                                             if "APROBADO" in juicio:
