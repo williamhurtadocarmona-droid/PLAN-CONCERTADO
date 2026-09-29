@@ -103,21 +103,17 @@ if uploaded_excel:
                                 for k, v in reemplazos.items():
                                     if k in cell.text: cell.text = cell.text.replace(k, v)
                         
-                        # Inyección segura y exacta en las celdas del Proyecto Formativo y Fase
+                        # Búsqueda inteligente de celdas por etiqueta de texto exacta para evitar deformaciones
                         for row in t0.rows:
-                            for cell in row.cells:
-                                if "Proyecto Formativo:" in cell.text or "Proyecto" in cell.text:
-                                    # Intentar ubicar la celda adyacente correcta
-                                    pass
-                        
-                        # Posicionamiento exacto por coordenadas según estructura estándar SENA
-                        try:
-                            t0.rows[2].cells[1].text = den_prog  # Programa
-                            t0.rows[3].cells[1].text = num_ficha   # Ficha
-                            t0.rows[3].cells[3].text = proj_input  # Proyecto Formativo
-                            t0.rows[3].cells[5].text = fase_input  # Fase del Proyecto
-                        except Exception:
-                            pass
+                            for c_idx, cell in enumerate(row.cells):
+                                txt_celda = cell.text.strip().upper()
+                                if "PROYECTO FORMATIVO" in txt_celda or txt_celda == "PROYECTO FORMATIVO:":
+                                    # La celda siguiente suele contener el valor
+                                    if c_idx + 1 < len(row.cells):
+                                        row.cells[c_idx + 1].text = proj_input
+                                if "FASE DEL PROYECTO" in txt_celda or "FASE" in txt_celda:
+                                    if c_idx + 1 < len(row.cells):
+                                        row.cells[c_idx + 1].text = fase_input
 
                     if len(doc.tables) > 1:
                         t_act = doc.tables[1]
