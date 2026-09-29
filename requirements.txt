@@ -1,6 +1,5 @@
+Plaintext
 streamlit
-   pandas
-   openpyxl
-   python-docx
-   reportlab
-   pypdf
+pandas
+openpyxl
+python-docx
