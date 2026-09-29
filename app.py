@@ -3,18 +3,68 @@ import pandas as pd
 from docx import Document
 import io
 import zipfile
+import re
 
 st.set_page_config(page_title="Generador de Planes de Trabajo SENA", page_icon="📄", layout="wide")
 
 st.title("📄 Generador de Planes de Trabajo - SENA")
-st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, configura el **Proyecto Formativo**, los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y el **Estado del Plan**.")
+st.write("Sube el archivo de **Reporte de Juicios Evaluativos (.xls/.xlsx)**, selecciona el **Programa**, configura los **Resultados de Aprendizaje**, **Actividades**, **Forma de Entrega** y el **Estado del Plan**.")
+
+# Cargar automáticamente la Planeación Pedagógica si existe en el proyecto
+@st.cache_data
+def cargar_mapa_planeacion():
+    totf_map = {}
+    try:
+        excel_path = "GPFI-F-134V05Formatoplaneacionpedagogica 2026.xlsx"
+        xls = pd.ExcelFile(excel_path)
+        for sheet in xls.sheet_names:
+            if 'TRIMESTRE' in sheet.upper():
+                df_p = pd.read_excel(excel_path, sheet_name=sheet)
+                header_row = -1
+                for r in range(10, min(20, len(df_p))):
+                    row_str = " ".join([str(x).strip().upper() for x in df_p.iloc[r].values if pd.notna(x)])
+                    if 'RESULTADOS DE APRENDIZAJE' in row_str:
+                        header_row = r
+                        break
+                if header_row != -1:
+                    rap_col, act_col = -1, -1
+                    for c in range(df_p.shape[1]):
+                        val = str(df_p.iloc[header_row, c]).strip().upper()
+                        if 'RESULTADOS DE APRENDIZAJE' in val:
+                            rap_col = c
+                        if 'ACTIVIDADES DE APRENDIZAJE' in val:
+                            act_col = c
+                    
+                    curr_rap = ""
+                    for r in range(header_row + 1, len(df_p)):
+                        val_rap = str(df_p.iloc[r, rap_col]).strip() if pd.notna(df_p.iloc[r, rap_col]) else ""
+                        val_act = str(df_p.iloc[r, act_col]).strip() if pd.notna(df_p.iloc[r, act_col]) else ""
+                        if val_rap and val_rap != 'nan':
+                            curr_rap = " ".join(val_rap.split())
+                        if curr_rap and val_act and val_act != 'nan':
+                            clean_act = " ".join(val_act.split())
+                            totf_map[curr_rap] = clean_act
+    except Exception as e:
+        pass
+    return totf_map
+
+totf_actividades_map = cargar_mapa_planeacion()
 
 # Subir archivo Excel desde la interfaz web
 uploaded_excel = st.file_uploader("Cargar Reporte de Juicios Evaluativos (Excel)", type=["xls", "xlsx"])
 
 if uploaded_excel is not None:
     try:
-        # 1. Extraer metadatos exactos de las primeras 12 filas
+        # 1. Menú desplegable para selección del Programa (TOTF vs TMMI)
+        st.subheader("📚 Selección del Programa de Formación")
+        programa_seleccionado = st.selectbox(
+            "Selecciona la Especialidad/Programa:",
+            options=["TOTF - Operación en Torno y Fresadora", "TMMI - Mantenimiento Mecánico Industrial"],
+            index=0,
+            help="Selecciona el programa correspondiente."
+        )
+
+        # 2. Extraer metadatos exactos del Excel (filas 0 a 11)
         df_meta = pd.read_excel(uploaded_excel, header=None, nrows=12)
         
         denominacion_programa = ""
@@ -27,25 +77,32 @@ if uploaded_excel is not None:
             elif label == "Denominación:":
                 denominacion_programa = str(row[2]).strip() if pd.notna(row[2]) else str(row[1]).strip()
 
-        st.info(f"📌 **Programa:** {denominacion_programa} | **Ficha de Caracterización:** {numero_ficha}")
+        # Si se selecciona TOTF, asigna valores predeterminados de TOTF
+        if "TOTF" in programa_seleccionado:
+            denominacion_programa = "OPERACION EN TORNO Y FRESADORA"
+            proyecto_default = "OPTIMIZACIÓN EN LA FABRICACIÓN DE COMPONENTES MECÁNICOS EN TORNO Y FRESADORA EN LAS INDUSTRIAS DEL ATLÁNTICO"
+        else:
+            proyecto_default = ""
 
-        # 2. Leer la tabla de juicios evaluativos (a partir de la fila 13)
+        st.info(f"📌 **Especialidad:** {programa_seleccionado} | **Programa de Formación:** {denominacion_programa} | **Ficha:** {numero_ficha}")
+
+        # 3. Leer la tabla de juicios evaluativos (a partir de la fila 13)
         df_raw = pd.read_excel(uploaded_excel, skiprows=12)
         df_raw.columns = [str(c).strip() for c in df_raw.columns]
         
-        # 3. Filtrar únicamente a los aprendices con estado "EN FORMACION"
+        # 4. Filtrar únicamente a los aprendices con estado "EN FORMACION"
         df_filtrado = df_raw[df_raw['Estado'].str.upper() == 'EN FORMACION'].copy()
         
-        # 4. Información General del Proyecto Formativo y Fase
+        # 5. Información General del Proyecto Formativo y Fase
         st.subheader("🛠️ 1. Datos del Proyecto Formativo")
         col_proj1, col_proj2 = st.columns(2)
         
         with col_proj1:
             proyecto_formativo_input = st.text_input(
                 "Proyecto Formativo:",
-                value="",
-                placeholder="Ej: Mantenimiento y montaje de sistemas eléctricos industriales",
-                help="Escribe el nombre del Proyecto Formativo."
+                value=proyecto_default,
+                placeholder="Escribe el nombre del Proyecto Formativo...",
+                help="Se autocompleta cuando seleccionas TOTF."
             )
             
         with col_proj2:
@@ -56,7 +113,7 @@ if uploaded_excel is not None:
                 help="Selecciona la Fase del Proyecto correspondiente."
             )
 
-        # 5. Obtener lista de Resultados de Aprendizaje (RAPs) disponibles
+        # 6. Obtener lista de Resultados de Aprendizaje (RAPs) disponibles
         raps_disponibles = sorted(df_filtrado['Resultado de Aprendizaje'].dropna().unique().tolist())
         
         st.subheader("🎯 2. Selección de Resultados de Aprendizaje (RAP)")
@@ -74,7 +131,7 @@ if uploaded_excel is not None:
         elif num_raps > 10:
             st.error("❌ Has seleccionado más de 10 RAPs. La plantilla actual admite un máximo de 10 actividades.")
         else:
-            # 6. Opciones del Tipo de Plan (Inicial vs Final)
+            # 7. Opciones del Tipo de Plan (Inicial vs Final)
             st.subheader("📋 3. Estado del Plan de Trabajo")
             tipo_plan = st.radio(
                 "Selecciona el momento de generación del Plan de Trabajo:",
@@ -84,7 +141,7 @@ if uploaded_excel is not None:
                 help="En 'Plan Inicial' los estados se completan automáticamente según el Excel. En 'Plan Final' puedes definir la entrega manual de cada actividad."
             )
 
-            # 7. Opciones de Configuración Masiva
+            # 8. Opciones de Configuración Masiva
             st.subheader("⚡ 4. Aplicación Masiva (Opcional)")
             col_m1, col_m2 = st.columns(2)
             
@@ -105,7 +162,7 @@ if uploaded_excel is not None:
                 else:
                     estado_masivo = "Sin cambio masivo"
 
-            # 8. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega
+            # 9. Configurar Actividades a desarrollar, Forma de Entrega y Estado de Entrega
             st.subheader("📝 5. Configurar Actividades e Individualizar")
             
             actividades_por_rap = {}
@@ -114,6 +171,21 @@ if uploaded_excel is not None:
 
             idx_entrega_default = 0 if "Física" in entrega_masiva else 1
             idx_estado_default = 0 if "SÍ" in estado_masivo else 1
+
+            # Función para buscar la actividad predeterminada según el RAP
+            def obtener_actividad_predeterminada(rap_str):
+                if "TOTF" in programa_seleccionado and totf_actividades_map:
+                    # Búsqueda exacta primero
+                    if rap_str in totf_actividades_map:
+                        return totf_actividades_map[rap_str]
+                    # Búsqueda por código de 6 dígitos
+                    m = re.search(r'\d{6}', rap_str)
+                    if m:
+                        code = m.group(0)
+                        for k_map, v_map in totf_actividades_map.items():
+                            if code in k_map:
+                                return v_map
+                return f"Desarrollar guía de aprendizaje y evidencias prácticas de: {rap_str.split('-')[-1].strip()}"
 
             for i, rap in enumerate(raps_seleccionados, 1):
                 st.markdown("---")
@@ -124,12 +196,14 @@ if uploaded_excel is not None:
                 else:
                     col1, col2 = st.columns([3, 1])
                 
+                default_act_val = obtener_actividad_predeterminada(rap)
+                
                 with col1:
                     actividades_por_rap[rap] = st.text_area(
                         f"Descripción de la Actividad {i}",
-                        value=f"Desarrollar guía de aprendizaje y evidencias prácticas de: {rap.split('-')[-1].strip()}",
+                        value=default_act_val,
                         key=f"act_rap_{i}",
-                        height=80
+                        height=100
                     )
                 
                 with col2:
@@ -151,9 +225,9 @@ if uploaded_excel is not None:
                             key=f"estado_entrega_{i}"
                         )
 
-            # 9. Obtener la lista de aprendices únicos en formación
+            # 10. Obtener la lista de aprendices únicos en formación
             aprendices = df_filtrado[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos', 'Estado']].drop_duplicates()
-            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | Tipo de Plan: **{tipo_plan}** | RAPs a evaluar: **{num_raps}**")
+            st.success(f"✅ Aprendices a procesar: **{len(aprendices)}** | Programa: **{programa_seleccionado.split(' - ')[0]}** | RAPs a evaluar: **{num_raps}**")
             
             with st.expander("👁️ Ver lista de aprendices a procesar"):
                 st.dataframe(aprendices[['Tipo de Documento', 'Número de Documento', 'Nombre', 'Apellidos']], use_container_width=True)
@@ -196,7 +270,7 @@ if uploaded_excel is not None:
                                 if k in p.text:
                                     p.text = p.text.replace(k, v)
                                     
-                        # Reemplazar encabezados en la primera tabla (datos aprendiz/programa)
+                        # Reemplazar encabezados en la primera tabla
                         if len(doc.tables) > 0:
                             t0 = doc.tables[0]
                             for row in t0.rows:
@@ -205,7 +279,6 @@ if uploaded_excel is not None:
                                         if k in cell.text:
                                             cell.text = cell.text.replace(k, v)
                             
-                            # Inserción directa en celdas para Proyecto Formativo (Fila 2, Celda 5) y Fase del Proyecto (Fila 3, Celda 1)
                             if len(t0.rows) > 2 and len(t0.rows[2].cells) > 5:
                                 if "Proyecto Formativo:" in t0.rows[2].cells[5].text:
                                     t0.rows[2].cells[6].text = proyecto_formativo_input
@@ -281,14 +354,16 @@ if uploaded_excel is not None:
                         doc.save(doc_io)
                         doc_io.seek(0)
                         
-                        filename = f"Plan_Trabajo_{num_doc}_{aprendiz['Nombre']}_{aprendiz['Apellidos']}.docx"
+                        sigla_prog = programa_seleccionado.split(' - ')[0]
+                        filename = f"Plan_Trabajo_{sigla_prog}_{num_doc}_{aprendiz['Nombre']}_{aprendiz['Apellidos']}.docx"
                         zip_file.writestr(filename, doc_io.getvalue())
                 
                 # Botón para descargar el ZIP resultante
+                sigla_prog = programa_seleccionado.split(' - ')[0]
                 st.download_button(
                     label="📦 Descargar Documentos de Aprendices (.zip)",
                     data=zip_buffer.getvalue(),
-                    file_name=f"Planes_Trabajo_{tipo_plan.replace(' ', '_')}_Ficha_{numero_ficha}.zip",
+                    file_name=f"Planes_Trabajo_{sigla_prog}_{tipo_plan.replace(' ', '_')}_Ficha_{numero_ficha}.zip",
                     mime="application/zip"
                 )
 
